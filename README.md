@@ -47,7 +47,7 @@
 
 ### 🔌 MCP 原生支持
 - **MCP Server 模式**：一键启动 Model Context Protocol 服务端
-- **Zen Design 理念**：意图与术语分离，LLM 友好的 API 设计
+- **意图与术语分离**：LLM 友好的 API 设计
 - **自动索引**：首次查询自动触发索引，增量更新透明无感
 
 ### ✏️ Prompt Enhancer（提示词增强）
@@ -188,11 +188,11 @@ ContextWeaver 提供两个 MCP 工具：
 | `information_request` | string | ✅ | 自然语言形式的语义意图描述 |
 | `technical_terms` | string[] | ❌ | 精确技术术语（类名、函数名等） |
 
-#### 设计理念 (Zen Design)
+#### 设计理念
 
 - **意图与术语分离**：`information_request` 描述「做什么」，`technical_terms` 过滤「叫什么」
-- **黄金默认值**：提供同文件上下文，禁止默认跨文件抓取
-- **回归代理本能**：工具只负责定位，跨文件探索由 Agent 自主发起
+- **同文件上下文优先**：默认提供同文件上下文，跨文件探索由 Agent 自主发起
+- **回归代理本能**：工具只负责定位，跨文件探索由 Agent 按需触发
 
 #### `enhance-prompt` 参数说明
 

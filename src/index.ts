@@ -223,13 +223,11 @@ cli
   .option('--repo-path <path>', '代码库根目录（默认当前目录）')
   .option('--information-request <text>', '自然语言问题描述（必填）')
   .option('--technical-terms <terms>', '精确术语（逗号分隔）')
-  .option('--zen', '使用 MCP Zen 配置（默认开启）')
   .action(
     async (options: {
       repoPath?: string;
       informationRequest?: string;
       technicalTerms?: string;
-      zen?: boolean;
     }) => {
       const repoPath = options.repoPath ? path.resolve(options.repoPath) : process.cwd();
       const informationRequest = options.informationRequest;
@@ -243,8 +241,6 @@ cli
         .map((t) => t.trim())
         .filter(Boolean);
 
-      const useZen = options.zen !== false;
-
       const { handleCodebaseRetrieval } = await import('./mcp/tools/codebaseRetrieval.js');
 
       const response = await handleCodebaseRetrieval(
@@ -253,7 +249,6 @@ cli
           information_request: informationRequest,
           technical_terms: technicalTerms.length > 0 ? technicalTerms : undefined,
         },
-        useZen ? undefined : {},
       );
 
       const text = response.content.map((item) => item.text).join('\n');

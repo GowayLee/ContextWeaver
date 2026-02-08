@@ -24,11 +24,11 @@ export const DEFAULT_CONFIG: SearchConfig = {
   maxBreadcrumbChars: 250,
   headRatio: 0.67,
 
-  // 扩展
-  neighborHops: 1,
-  breadcrumbExpandLimit: 1,
-  importFilesPerSeed: 5,
-  chunksPerImportFile: 2,
+  // 扩展 (同文件充分展开，跨文件由 Agent 按需发起)
+  neighborHops: 2,
+  breadcrumbExpandLimit: 3,
+  importFilesPerSeed: 0,
+  chunksPerImportFile: 0,
   decayNeighbor: 0.8,
   decayBreadcrumb: 0.7,
   decayImport: 0.6,

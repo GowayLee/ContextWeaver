@@ -1,11 +1,10 @@
 /**
  * codebase-retrieval MCP Tool
  *
- * 极简主义 (Zen Design) 代码检索工具
+ * 代码检索工具
  *
  * 设计理念：
  * - 意图与术语分离：LLM 只需区分"语义意图"和"精确术语"
- * - 黄金默认值：提供同文件上下文，禁止跨文件抓取
  * - 回归代理本能：工具只负责定位，跨文件探索由 Agent 自主发起
  */
 
@@ -15,7 +14,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import { generateProjectId } from '../../db/index.js';
 // 注意：SearchService 和 scan 改为延迟导入，避免在 MCP 启动时就加载 native 模块
-import type { ContextPack, SearchConfig, Segment } from '../../search/types.js';
+import type { ContextPack, Segment } from '../../search/types.js';
 import { logger } from '../../utils/logger.js';
 
 // 工具 Schema (暴露给 LLM)
@@ -40,26 +39,6 @@ export const codebaseRetrievalSchema = z.object({
 });
 
 export type CodebaseRetrievalInput = z.infer<typeof codebaseRetrievalSchema>;
-
-// 默认配置 (Zen Config)
-
-/**
- * MCP 工具专用配置覆盖
- *
- * 目标：提供足够看懂当前文件的上下文，但不跨文件
- */
-const ZEN_CONFIG_OVERRIDE: Partial<SearchConfig> = {
-  // E1: 邻居扩展 - 前后看 2 个 chunk，保证代码块完整性
-  neighborHops: 2,
-
-  // E2: 面包屑补全 - 必须开启，保证能看到当前方法所属的 Class/Function 定义
-  breadcrumbExpandLimit: 3,
-
-  // E3: Import 扩展 - 强制关闭！
-  // 理由：跨文件是 Agent 的决策，不要预加载，防止 Token 爆炸
-  importFilesPerSeed: 0,
-  chunksPerImportFile: 0,
-};
 
 // ===========================================
 // 自动索引逻辑
@@ -190,12 +169,10 @@ export type ProgressCallback = (current: number, total?: number, message?: strin
  * 处理 codebase-retrieval 工具调用
  *
  * @param args 工具输入参数
- * @param configOverride 可选的配置覆盖
  * @param onProgress 可选的进度回调（用于 MCP 进度通知）
  */
 export async function handleCodebaseRetrieval(
   args: CodebaseRetrievalInput,
-  configOverride: Partial<SearchConfig> = ZEN_CONFIG_OVERRIDE,
   onProgress?: ProgressCallback,
 ): Promise<{ content: Array<{ type: 'text'; text: string }> }> {
   const { repo_path, information_request, technical_terms } = args;
@@ -237,7 +214,6 @@ export async function handleCodebaseRetrieval(
     {
       projectId: projectId.slice(0, 10),
       query,
-      zenConfig: configOverride,
     },
     'MCP 查询构建',
   );
@@ -245,8 +221,8 @@ export async function handleCodebaseRetrieval(
   // 4. 延迟导入 SearchService（避免 MCP 启动时加载 native 模块）
   const { SearchService } = await import('../../search/SearchService.js');
 
-  // 5. 创建 SearchService 实例（使用 Zen Config）
-  const service = new SearchService(projectId, repo_path, configOverride);
+  // 5. 创建 SearchService 实例
+  const service = new SearchService(projectId, repo_path);
   await service.init();
   logger.debug('SearchService 初始化完成');
 
@@ -311,9 +287,7 @@ export async function handleCodebaseRetrieval(
 /**
  * 格式化为 MCP 响应格式
  */
-function formatMcpResponse(
-  pack: ContextPack,
-): { content: Array<{ type: 'text'; text: string }> } {
+function formatMcpResponse(pack: ContextPack): { content: Array<{ type: 'text'; text: string }> } {
   const { files, seeds } = pack;
 
   // 构建文件内容块

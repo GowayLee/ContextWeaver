@@ -7,3 +7,6 @@ dist
 .ace-tool/
 .playwright-mcp/
 .snow
+test-*
+.codex
+.pnpm-store
