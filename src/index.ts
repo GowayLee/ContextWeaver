@@ -110,20 +110,28 @@ cli
     const startTime = Date.now();
 
     try {
+      const { withLock } = await import('./utils/lock.js');
+
       // 进度日志节流：只在 30%、60%、90% 时输出（100% 由扫描完成日志代替）
       let lastLoggedPercent = 0;
-      const stats: ScanStats = await scan(rootPath, {
-        force: options.force,
-        onProgress: (current, total, message) => {
-          if (total !== undefined) {
-            const percent = Math.floor((current / total) * 100);
-            if (percent >= lastLoggedPercent + 30 && percent < 100) {
-              logger.info(`索引进度: ${percent}% - ${message || ''}`);
-              lastLoggedPercent = Math.floor(percent / 30) * 30;
-            }
-          }
-        },
-      });
+      const stats: ScanStats = await withLock(
+        projectId,
+        'index',
+        async () =>
+          scan(rootPath, {
+            force: options.force,
+            onProgress: (current, total, message) => {
+              if (total !== undefined) {
+                const percent = Math.floor((current / total) * 100);
+                if (percent >= lastLoggedPercent + 30 && percent < 100) {
+                  logger.info(`索引进度: ${percent}% - ${message || ''}`);
+                  lastLoggedPercent = Math.floor(percent / 30) * 30;
+                }
+              }
+            },
+          }),
+        10 * 60 * 1000,
+      );
 
       process.stdout.write('\n');
 

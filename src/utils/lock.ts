@@ -10,13 +10,25 @@ import path from 'node:path';
 import { logger } from './logger.js';
 
 const BASE_DIR = path.join(os.homedir(), '.contextweaver');
-const LOCK_TIMEOUT_MS = 5 * 60 * 1000; // 5 分钟锁超时
 const LOCK_CHECK_INTERVAL_MS = 100; // 检查间隔
+const LOCK_WRITE_GRACE_MS = 2000; // 锁文件写入宽限期，避免误删刚创建的锁
 
 interface LockInfo {
   pid: number;
   timestamp: number;
   operation: string;
+}
+
+/**
+ * 获取锁文件年龄（毫秒）
+ */
+function getLockAgeMs(lockPath: string): number | null {
+  try {
+    const stats = fs.statSync(lockPath);
+    return Date.now() - stats.mtimeMs;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -31,8 +43,7 @@ function getLockFilePath(projectId: string): string {
  *
  * 锁无效的情况：
  * 1. 锁文件不存在
- * 2. 锁已超时
- * 3. 持有锁的进程已死亡
+ * 2. 持有锁的进程已死亡
  */
 function isLockValid(lockPath: string): boolean {
   try {
@@ -43,21 +54,25 @@ function isLockValid(lockPath: string): boolean {
     const content = fs.readFileSync(lockPath, 'utf-8');
     const lockInfo: LockInfo = JSON.parse(content);
 
-    // 检查锁是否超时
-    if (Date.now() - lockInfo.timestamp > LOCK_TIMEOUT_MS) {
-      logger.warn({ lockInfo, lockPath }, '锁已超时');
-      return false;
-    }
-
     // 检查进程是否存活（跨平台）
     try {
       process.kill(lockInfo.pid, 0); // 发送信号 0 只检查进程是否存在
       return true;
-    } catch {
+    } catch (err) {
+      const error = err as NodeJS.ErrnoException;
+      if (error.code === 'EPERM') {
+        // 没权限发信号但进程存在，视为锁仍有效
+        return true;
+      }
       logger.warn({ pid: lockInfo.pid }, '持有锁的进程已死亡');
       return false;
     }
   } catch (err) {
+    const ageMs = getLockAgeMs(lockPath);
+    if (ageMs !== null && ageMs <= LOCK_WRITE_GRACE_MS) {
+      // 刚创建的锁可能尚未写完，短暂视为有效，避免竞态误删
+      return true;
+    }
     const error = err as { message?: string };
     logger.debug({ error: error.message }, '读取锁文件失败');
     return false;
@@ -88,33 +103,41 @@ async function acquireLock(
   const startTime = Date.now();
 
   while (Date.now() - startTime < timeoutMs) {
-    // 如果锁无效，尝试获取
-    if (!isLockValid(lockPath)) {
-      try {
-        const lockInfo: LockInfo = {
-          pid: process.pid,
-          timestamp: Date.now(),
-          operation,
-        };
+    // 先尝试原子创建锁
+    try {
+      const lockInfo: LockInfo = {
+        pid: process.pid,
+        timestamp: Date.now(),
+        operation,
+      };
 
-        // 使用 wx 标志：如果文件存在则失败（原子操作）
-        // 注意：这不是完全原子的，但对于我们的场景足够了
-        fs.writeFileSync(lockPath, JSON.stringify(lockInfo), { flag: 'w' });
+      // 使用 wx：文件已存在则抛 EEXIST，避免锁被覆盖
+      fs.writeFileSync(lockPath, JSON.stringify(lockInfo), { flag: 'wx' });
+      logger.debug({ projectId: projectId.slice(0, 10), operation }, '获取锁成功');
+      return true;
+    } catch (err) {
+      const error = err as NodeJS.ErrnoException;
 
-        // 再次验证是自己写的（防止竞态）
-        const verifyContent = fs.readFileSync(lockPath, 'utf-8');
-        const verifyInfo: LockInfo = JSON.parse(verifyContent);
-        if (verifyInfo.pid === process.pid) {
-          logger.debug({ projectId: projectId.slice(0, 10), operation }, '获取锁成功');
-          return true;
+      // 锁已存在：检查是否为失效锁，若失效则移除后重试
+      if (error.code === 'EEXIST') {
+        if (!isLockValid(lockPath)) {
+          try {
+            fs.unlinkSync(lockPath);
+            logger.warn({ projectId: projectId.slice(0, 10) }, '移除失效锁');
+            continue;
+          } catch (unlinkErr) {
+            const unlinkError = unlinkErr as NodeJS.ErrnoException;
+            // 可能是并发下其他进程已删除，忽略
+            if (unlinkError.code !== 'ENOENT') {
+              logger.debug({ error: unlinkError.message }, '移除失效锁失败，重试中...');
+            }
+          }
+        } else {
+          logger.debug({ projectId: projectId.slice(0, 10) }, '等待锁释放...');
         }
-      } catch (err) {
-        const error = err as { message?: string };
-        // 写入失败，可能被其他进程抢占
+      } else {
         logger.debug({ error: error.message }, '获取锁失败，重试中...');
       }
-    } else {
-      logger.debug({ projectId: projectId.slice(0, 10) }, '等待锁释放...');
     }
 
     // 等待后重试

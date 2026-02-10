@@ -89,6 +89,7 @@ export class Indexer {
     // 分类处理结果
     const toIndex: FileToIndex[] = [];
     const toDelete: string[] = [];
+    const noChunkSettled: Array<{ path: string; hash: string }> = [];
 
     for (const result of results) {
       switch (result.status) {
@@ -101,8 +102,15 @@ export class Indexer {
               chunks: result.chunks,
             });
           } else {
-            // chunks 为空（解析失败或空文件），清除向量但不标记为错误
-            toDelete.push(result.relPath);
+            // chunks 为空（解析失败或空文件）
+            // 仅 modified 文件可能有旧向量记录需要清除，added 文件从未存在过向量记录
+            if (result.status === 'modified') {
+              toDelete.push(result.relPath);
+            }
+            noChunkSettled.push({
+              path: result.relPath,
+              hash: result.hash,
+            });
             stats.skipped++;
           }
           break;
@@ -128,6 +136,16 @@ export class Indexer {
       stats.deleted = toDelete.length;
     }
 
+    // chunks 为空的文件视为已收敛：标记 vector_index_hash=hash
+    // 避免这些文件在下一轮被持续判定为“需要自愈”
+    if (noChunkSettled.length > 0) {
+      batchUpdateVectorIndexHash(db, noChunkSettled);
+      logger.debug(
+        { count: noChunkSettled.length },
+        '无可索引 chunk，标记向量索引状态为已收敛',
+      );
+    }
+
     // 批量处理需要索引的文件
     if (toIndex.length > 0) {
       const indexResult = await this.batchIndex(db, toIndex, onProgress);
@@ -138,7 +156,7 @@ export class Indexer {
     logger.info(
       {
         indexed: stats.indexed,
-        deleted: stats.deleted,
+        vectorRecordsDeleted: stats.deleted,
         errors: stats.errors,
         skipped: stats.skipped,
       },

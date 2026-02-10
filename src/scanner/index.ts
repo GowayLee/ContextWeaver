@@ -187,9 +187,6 @@ export async function scan(rootPath: string, options: ScanOptions = {}): Promise
 
     // ===== 向量索引 =====
     if (options.vectorIndex !== false) {
-      // 报告阶段 3: 开始向量索引
-      options.onProgress?.(45, 100, '正在准备向量索引...');
-
       const embeddingConfig = getEmbeddingConfig();
       const indexer = await getIndexer(projectId, embeddingConfig.dimensions);
 
@@ -207,11 +204,31 @@ export async function scan(rootPath: string, options: ScanOptions = {}): Promise
         .filter((r) => r.status === 'unchanged' && healingPathSet.has(r.relPath))
         .map((r) => r.absPath);
 
+      // 仅在确实存在向量层工作时报告进度，避免“无事可做”也显示准备阶段
+      const hasVectorWorkCandidates =
+        needsVectorIndex.length > 0 || deletedPaths.length > 0 || healingFilePaths.length > 0;
+      if (hasVectorWorkCandidates) {
+        options.onProgress?.(45, 100, '正在准备向量索引...');
+      }
+
       let healingFiles: ProcessResult[] = [];
       if (healingFilePaths.length > 0) {
-        logger.info({ count: healingFilePaths.length }, '自愈：发现需要补索引的文件');
         // 重新处理这些文件（传入空的 knownFiles 强制重新读取和分片）
         const processedHealingFiles = await processFiles(rootPath, healingFilePaths, new Map());
+        const healingIndexableCount = processedHealingFiles.filter(
+          (r) => (r.status === 'added' || r.status === 'modified') && r.chunks.length > 0,
+        ).length;
+        const healingSkippedCount = processedHealingFiles.filter(
+          (r) => (r.status === 'added' || r.status === 'modified') && r.chunks.length === 0,
+        ).length;
+
+        if (healingIndexableCount > 0) {
+          logger.info({ count: healingIndexableCount }, '自愈：发现需要补索引的文件');
+        }
+        if (healingSkippedCount > 0) {
+          logger.info({ count: healingSkippedCount }, '自愈：文件无可索引 chunk，标记为跳过');
+        }
+
         // 将状态改为 modified 确保 indexer 会处理
         healingFiles = processedHealingFiles
           .filter((r) => r.status === 'added' || r.status === 'modified')
@@ -234,9 +251,15 @@ export async function scan(rootPath: string, options: ScanOptions = {}): Promise
       const allToIndex = [...needsVectorIndex, ...healingFiles, ...deletedResults];
 
       if (allToIndex.length > 0) {
-        // 报告开始生成向量嵌入（这是最耗时的阶段）
-        // Embedding 进度映射到 45-99 区间，确保进度单调递增
-        options.onProgress?.(45, 100, `正在生成向量嵌入... (${allToIndex.length} 个文件)`);
+        // 报告向量更新阶段开始（包含新增/修改/删除/自愈收敛）
+        const embeddingFileCount = allToIndex.filter(
+          (r) => (r.status === 'added' || r.status === 'modified') && r.chunks.length > 0,
+        ).length;
+        if (embeddingFileCount > 0) {
+          options.onProgress?.(45, 100, `正在生成向量嵌入... (${embeddingFileCount} 个文件)`);
+        } else {
+          options.onProgress?.(45, 100, '正在同步向量索引状态...');
+        }
 
         // 传递进度回调给 indexer（embedding API 调用是真正的耗时操作）
         const indexStats = await indexer.indexFiles(db, allToIndex, (completed, total) => {

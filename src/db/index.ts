@@ -83,6 +83,7 @@ export function initDb(projectId: string): Database.Database {
 
   const dbPath = path.join(projectDir, 'index.db');
   const db = new Database(dbPath);
+  db.pragma('busy_timeout = 5000');
   db.pragma('journal_mode = WAL');
 
   // 创建 files 表
