@@ -10,3 +10,5 @@ dist
 test-*
 .codex
 .pnpm-store
+.opencode
+package-lock.json
