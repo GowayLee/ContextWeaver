@@ -30,6 +30,7 @@ jobs:
       - name: Resolve release version
         id: rel
         run: |
+          PKG_NAME="$(node -p \"require('./package.json').name\")"
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             INPUT="${{ github.event.inputs.version }}"
             VER="${INPUT#v}"
@@ -39,6 +40,7 @@ jobs:
             echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
             echo "ver=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
           fi
+          echo "pkg_name=$PKG_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -77,7 +79,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         id: npmcheck
         run: |
-          if npm view @hsingjui/contextweaver@${{ steps.rel.outputs.ver }} version >/dev/null 2>&1; then
+          if npm view ${{ steps.rel.outputs.pkg_name }}@${{ steps.rel.outputs.ver }} version >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
@@ -101,7 +103,7 @@ jobs:
 
             ### Installation
             ```bash
-            npm install -g @hsingjui/contextweaver
+            npm install -g ${{ steps.rel.outputs.pkg_name }}
             # or
-            pnpm add -g @hsingjui/contextweaver
+            pnpm add -g ${{ steps.rel.outputs.pkg_name }}
             ```
