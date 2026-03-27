@@ -23,7 +23,7 @@ node dist/index.js            # 直接运行
 contextweaver init            # 初始化配置文件 (~/.contextweaver/.env)
 contextweaver index [path]    # 索引代码库
 contextweaver search          # 本地搜索
-contextweaver mcp             # 启动 MCP 服务端
+contextweaver prompt-context  # 为 prompt 增强准备仓库证据
 ```
 
 ## Architecture
@@ -45,7 +45,8 @@ contextweaver mcp             # 启动 MCP 服务端
 | **SemanticSplitter** | `src/chunking/SemanticSplitter.ts` | AST 语义分片器 (Tree-sitter)                           |
 | **VectorStore**      | `src/vectorStore/index.ts`         | LanceDB 适配层                                         |
 | **Database**         | `src/db/index.ts`                  | SQLite + FTS5 元数据和全文索引                         |
-| **MCP Server**       | `src/mcp/server.ts`                | Model Context Protocol 服务端实现                      |
+| **retrieval**        | `src/retrieval/index.ts`           | 结构化检索输出与 CLI 渲染                              |
+| **promptContext**    | `src/promptContext/index.ts`       | prompt 证据准备、语言检测、技术词提取                  |
 
 ### Import Resolvers
 

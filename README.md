@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <em>Semantic Code Retrieval for AI Agents — Hybrid Search • Graph Expansion • Token-Aware Packing • Prompt Enhancer</em>
+  <em>Context Engine for AI Agents — Hybrid Search • Graph Expansion • Token-Aware Packing • Prompt Context Preparation</em>
 </p>
 
 <p align="center">
@@ -14,565 +14,143 @@
 
 ---
 
-> **Fork 说明**：本项目 fork 自 [hsingjui/ContextWeaver](https://github.com/hsingjui/ContextWeaver)，当前维护仓库为 [GowayLee/ContextWeaver](https://github.com/GowayLee/ContextWeaver)，新增了 **Prompt Enhancer（提示词增强）** 功能，支持 OpenAI / Claude / Gemini 多 LLM 端点、CLI 命令行、Web UI 交互三种使用方式。
-
-**ContextWeaver** 是一个专为 AI 代码助手设计的语义检索引擎，采用混合搜索（向量 + 词法）、智能上下文扩展和 Token 感知打包策略，为 LLM 提供精准、相关且上下文完整的代码片段。
-
-<p align="center">
-  <img src="docs/architecture.png" alt="ContextWeaver 架构概览" width="800" />
-</p>
+**ContextWeaver** 是一个专为 AI 代码助手设计的上下文引擎，由 **CLI + Skill** 组成：CLI 提供稳定的本地检索与证据准备命令，Skill 指导运行中的 agent 如何消费这些结果、如何在必要时向用户提问、以及如何把模糊请求收敛成可执行任务。
 
 ## ✨ 核心特性
 
-### 🔍 混合检索引擎
+- **混合检索引擎**：向量召回 + 词法召回 + RRF 融合 + 精排
+- **三阶段上下文扩展**：邻居扩展、Breadcrumb 补全、Import 追踪
+- **确认式索引**：首次索引必须先预览范围并显式确认
+- **Skill 资产**：内置可分发的 `using-contextweaver` 与 `enhancing-prompts` 技能资产
+- **Prompt Context 准备**：把模糊请求转换为基于仓库事实的证据包，供 agent 自行增强任务说明
 
-- **向量召回 (Vector Retrieval)**：基于语义相似度的深度理解
-- **词法召回 (Lexical/FTS)**：精确匹配函数名、类名等技术术语
-- **RRF 融合 (Reciprocal Rank Fusion)**：智能融合多路召回结果
-
-### 🧠 AST 语义分片
-
-- **Tree-sitter 解析**：支持 TypeScript、JavaScript、Python、Go、Java、Rust、C、C++、C# 九大语言
-- **Dual-Text 策略**：`displayCode` 用于展示，`vectorText` 用于 Embedding
-- **Gap-Aware 合并**：智能处理代码间隙，保持语义完整性
-- **Breadcrumb 注入**：向量文本包含层级路径，提升检索召回率
-
-### 📊 三阶段上下文扩展
-
-- **E1 邻居扩展**：同文件前后相邻 chunks，保证代码块完整性
-- **E2 面包屑补全**：同一类/函数下的其他方法，理解整体结构
-- **E3 Import 解析**：跨文件依赖追踪（可配置开关）
-
-### 🎯 智能截断策略 (Smart TopK)
-
-- **Anchor & Floor**：动态阈值 + 绝对下限双保险
-- **Delta Guard**：防止 Top1 outlier 场景的误判
-- **Safe Harbor**：前 N 个结果只检查下限，保证基本召回
-
-### 🔌 MCP 原生支持
-
-- **MCP Server 模式**：一键启动 Model Context Protocol 服务端
-- **意图与术语分离**：LLM 友好的 API 设计
-- **确认式索引**：首次索引必须先预览实际匹配范围并显式确认
-
-### ✏️ Prompt Enhancer（提示词增强）
-
-- **多 LLM 支持**：OpenAI / Claude / Gemini 一键切换
-- **三种交互方式**：MCP 工具调用、CLI 命令行、Web UI 浏览器交互
-- **自动语言检测**：中文输入自动用中文回复
-- **可自定义模板**：支持自定义增强提示词模板
-
-## 📦 快速开始
-
-### 环境要求
-
-- Node.js >= 20
-- pnpm (推荐) 或 npm
-
-### 安装
+## 📦 安装
 
 ```bash
-# 本地构建发布包
 pnpm build
 npm pack
-
-# 全局安装本地 tarball
 npm install -g ./haurynlee-contextweaver-*.tgz
 ```
 
-当前不提供 npm 远程安装说明，推荐先在仓库本地构建并通过 tarball 安装。
-
-### 初始化配置
+## ⚙️ 初始化
 
 ```bash
-# 初始化配置文件（创建 ~/.contextweaver/.env）
 contextweaver init
-# 或简写
-cw init
 ```
 
-编辑 `~/.contextweaver/.env`，填入你的 API Key：
+编辑 `~/.contextweaver/.env`，填入 Embedding 与 Reranker 配置：
 
 ```bash
-# Embedding API 配置（必需）
 EMBEDDINGS_API_KEY=your-api-key-here
 EMBEDDINGS_BASE_URL=https://api.siliconflow.cn/v1/embeddings
 EMBEDDINGS_MODEL=BAAI/bge-m3
 EMBEDDINGS_MAX_CONCURRENCY=10
 EMBEDDINGS_DIMENSIONS=1024
 
-# Reranker 配置（必需）
 RERANK_API_KEY=your-api-key-here
 RERANK_BASE_URL=https://api.siliconflow.cn/v1/rerank
 RERANK_MODEL=BAAI/bge-reranker-v2-m3
 RERANK_TOP_N=20
-
-# Prompt Enhancer 配置（可选，使用 enhance / enhance-prompt 时需要）
-# PROMPT_ENHANCER_ENDPOINT=openai          # 端点：openai / claude / gemini
-# PROMPT_ENHANCER_BASE_URL=                # 自定义 API 地址（代理等场景）
-# PROMPT_ENHANCER_TOKEN=your-api-key-here  # API 密钥（必填）
-# PROMPT_ENHANCER_MODEL=                   # 自定义模型
-# PROMPT_ENHANCER_TEMPLATE=                # 自定义增强模板文件路径
 ```
 
-### 项目索引配置
+## 🗂️ 项目索引配置
 
-项目级索引范围通过仓库根目录的 `cwconfig.json` 控制，不再使用 `IGNORE_PATTERNS` 环境变量。
+仓库根目录通过 `cwconfig.json` 控制索引范围：
 
 ```bash
-# 在当前目录快速生成 cwconfig.json 模板
 contextweaver init-project
-
-# 已存在时强制覆盖
-contextweaver init-project --force
 ```
+
+示例：
 
 ```json
 {
   "indexing": {
-    "includePatterns": ["src/**", "packages/*/src/**"],
+    "includePatterns": ["src/**"],
     "ignorePatterns": ["**/generated/**", "**/__snapshots__/**"]
   }
 }
 ```
 
-默认模板会显式写入 `includePatterns: ["src/**"]`，作为更安全的项目起点；如果你要索引更大范围，再按仓库实际结构手动调整。
-
-- `includePatterns` 先缩小候选范围；省略时默认整个仓库可参与索引
-- `includePatterns` 传空数组时表示索引范围为空
-- `ignorePatterns` 再从候选范围中剔除路径
-- 过滤顺序固定为：内置默认排除 → `includePatterns` → `ignorePatterns` → 项目根 `.gitignore` → 扩展名白名单
-- 内置默认排除规则和项目根 `.gitignore` 仍然会继续生效，`includePatterns` 不能把它们重新纳入索引
-- 仓库根的 `cwconfig.json` 本身不会被索引，但子目录里的同名文件不会被特殊处理
-- 不支持 `!` negation 模式；配置文件存在语法或字段错误时，索引会直接失败而不是静默回退
-
-#### 迁移说明
-
-- 旧的 `IGNORE_PATTERNS` 环境变量已经移除，不再兼容
-- 之前写在 shell、CI 或用户级 `.env` 中的索引过滤规则，应迁移到仓库根 `cwconfig.json`
-- 如果你的仓库没有 `cwconfig.json`，`cw index` 会先自动创建模板并退出，要求你检查后再继续
-
-#### 常见示例
-
-```json
-{
-  "indexing": {
-    "includePatterns": ["src/**", "packages/*/src/**", "apps/*/src/**"],
-    "ignorePatterns": [
-      "**/generated/**",
-      "**/__snapshots__/**",
-      "**/fixtures/**"
-    ]
-  }
-}
-```
-
-- 单仓库项目：只索引 `src/**`
-- Monorepo：组合 `packages/*/src/**`、`apps/*/src/**`
-- 生成代码、快照、夹具等高噪音目录，建议放进 `ignorePatterns`
-
-### 索引代码库
+## 🚀 常用命令
 
 ```bash
-# 在代码库根目录执行
+# 建立或更新索引
 contextweaver index
 
-# 指定路径
-contextweaver index /path/to/your/project
+# 语义检索（文本输出）
+contextweaver search --information-request "提示词增强相关逻辑是怎么实现的？"
 
-# 强制重新索引
-contextweaver index --force
-```
+# 语义检索（JSON 输出，给脚本或 Skill 用）
+contextweaver search --format json --information-request "提示词增强相关逻辑是怎么实现的？"
 
-`cw index` 现在是确认式工作流：
+# 为模糊请求准备 repo-aware 证据（默认文本输出）
+contextweaver prompt-context "把 prompt enhance 对齐到 Skills"
 
-- 缺少 `cwconfig.json` 时，会自动生成模板并立即退出
-- 正式索引前会先打印索引范围摘要，包含当前 `builtin ignore` 的实际明细，再展示“实际匹配预览”的目录/扩展名摘要和真实路径样本
-- 你确认后才会开始索引；非交互环境必须显式传 `--yes`
-- `--yes` 也会被记为一次有效确认，后续 `search` / MCP 才能静默做增量修补
+# 为脚本 / Skill 准备结构化证据
+contextweaver prompt-context --format json "把 prompt enhance 对齐到 Skills"
 
-### 清理失效索引
+# 安装内置 Skill 到当前目录
+contextweaver install-skills
 
-```bash
-# 交互式扫描 ~/.contextweaver 并清理失效索引
-contextweaver clean
+# 安装内置 Skill 到指定目录
+contextweaver install-skills --dir ./agent-skills
 
-# 只查看待清理项
+# 清理失效索引
 contextweaver clean --dry-run
-
-# 跳过确认直接清理
-contextweaver clean --yes
 ```
 
-`clean` 会根据记录的项目路径和目录身份信息，筛选出本地已经不存在或已变更为其他仓库的索引目录，并在删除前统一确认一次。
+注意：CLI 默认输出优先给人看：`search` 与 `prompt-context` 默认都是 `text`；脚本或 Skill 请显式用 `--format json`，或直接调用仓库附带的 helper script。
 
-### 本地搜索
+注意：`search` 与 `prompt-context` 都要求当前仓库已经成功完成过一次确认式 `contextweaver index`。
 
-```bash
-# 语义搜索
-cw search --information-request "用户认证流程是如何实现的？"
+## 🧠 Skill 资产
 
-# 带精确术语
-cw search --information-request "数据库连接逻辑" --technical-terms "DatabasePool,Connection"
+仓库提供可分发的 Skill 目录：`skills/`
+
+- `skills/using-contextweaver/`
+  - 面向语义检索与代码定位
+  - 配套脚本 `scripts/search-context.mjs`
+  - 默认输出 JSON；调试时可加 `--format text`
+- `skills/enhancing-prompts/`
+  - 面向“模糊代码库请求 -> repo-aware 推荐任务解释 -> 必要时一次 Question -> 最终任务 prompt”
+  - 配套脚本 `scripts/prepare-enhancement-context.mjs`
+  - 中文模板位于 `templates/`
+  - 默认输出 JSON；调试时可加 `--format text`
+
+通过 npm 全局安装后，内置 Skill 会随包一起分发；可用 `contextweaver install-skills` 直接复制到当前目录，也可以用 `--dir` 指定任意安装目录，方便接入不同 agent 环境。
+
+## 🏗️ 架构
+
+```text
+索引: Crawler → Processor → SemanticSplitter → Indexer → VectorStore / SQLite
+搜索: Query → Vector + FTS Recall → RRF Fusion → Rerank → GraphExpander → ContextPacker
+Skill 资产链路: CLI 结构化 JSON 输出 → Skill 脚本 → Agent 解释/提问/任务收敛
 ```
 
-首次使用本地 `search` 前，仓库必须已经成功完成过一次确认式 `cw index`；否则会直接报错，提示先执行索引确认。
+关键模块：
 
-### 提示词增强
+| 模块            | 位置                          | 作用                        |
+| --------------- | ----------------------------- | --------------------------- |
+| `SearchService` | `src/search/SearchService.ts` | 混合搜索核心                |
+| `GraphExpander` | `src/search/GraphExpander.ts` | 三阶段上下文扩展            |
+| `ContextPacker` | `src/search/ContextPacker.ts` | 段落合并与预算控制          |
+| `retrieval`     | `src/retrieval/index.ts`      | 结构化检索输出与 CLI 渲染   |
+| `promptContext` | `src/promptContext/index.ts`  | Prompt 证据准备与技术词提取 |
 
-<p align="center">
-  <img src="docs/prompt-enhancer-ui.png" alt="Prompt Enhancer Web UI" width="800" />
-</p>
+## 📁 目录概览
 
-```bash
-# 默认启动 Web UI 交互式编辑
-cw enhance "帮我实现一个带缓存的语义搜索"
-
-# 直接输出到 stdout
-cw enhance "帮我实现一个带缓存的语义搜索" --no-browser
-
-# 临时指定端点（openai/claude/gemini）
-cw enhance "帮我实现一个带缓存的语义搜索" --endpoint claude --no-browser
+```text
+src/
+  search/               # 搜索核心
+  scanner/              # 索引扫描
+  retrieval/            # 结构化检索输出
+  promptContext/        # prompt 证据准备
+skills/
+  using-contextweaver/
+  enhancing-prompts/
 ```
 
-### 启动 MCP 服务器
+## 📄 License
 
-```bash
-# 启动 MCP 服务端（供 Claude 等 AI 助手使用）
-contextweaver mcp
-```
-
-## 🔧 MCP 集成配置
-
-### Claude Desktop / Claude Code 配置
-
-在配置文件中添加：
-
-```json
-{
-  "mcpServers": {
-    "contextweaver": {
-      "command": "contextweaver",
-      "args": ["mcp"]
-    }
-  }
-}
-```
-
-### MCP 工具说明
-
-ContextWeaver 提供两个 MCP 工具：
-
-- `codebase-retrieval`：代码库检索（主工具）
-- `enhance-prompt`：提示词增强（可选，需要额外配置外部 LLM API）
-
-#### `codebase-retrieval` 参数说明
-
-| 参数                  | 类型     | 必需 | 描述                           |
-| --------------------- | -------- | ---- | ------------------------------ |
-| `repo_path`           | string   | ✅   | 代码库根目录的绝对路径         |
-| `information_request` | string   | ✅   | 自然语言形式的语义意图描述     |
-| `technical_terms`     | string[] | ❌   | 精确技术术语（类名、函数名等） |
-
-#### 设计理念
-
-- **意图与术语分离**：`information_request` 描述「做什么」，`technical_terms` 过滤「叫什么」
-- **同文件上下文优先**：默认提供同文件上下文，跨文件探索由 Agent 自主发起
-- **回归代理本能**：工具只负责定位，跨文件探索由 Agent 按需触发
-- **首次自动索引已禁用**：仓库必须先手动完成一次确认式 `cw index`，之后 MCP 才会静默做增量修补
-
-#### `enhance-prompt` 参数说明
-
-| 参数                   | 类型   | 必需 | 描述                                          |
-| ---------------------- | ------ | ---- | --------------------------------------------- |
-| `prompt`               | string | ✅   | 原始提示词                                    |
-| `conversation_history` | string | ❌   | 对话历史（格式：`User: ...\nAssistant: ...`） |
-| `project_root_path`    | string | ❌   | 项目根目录路径                                |
-
-#### Prompt Enhancer 端点默认值
-
-| 端点     | 默认 Base URL                                      | 默认模型                   |
-| -------- | -------------------------------------------------- | -------------------------- |
-| `openai` | `https://api.openai.com/v1/chat/completions`       | `gpt-4o-mini`              |
-| `claude` | `https://api.anthropic.com/v1/messages`            | `claude-sonnet-4-20250514` |
-| `gemini` | `https://generativelanguage.googleapis.com/v1beta` | `gemini-2.0-flash`         |
-
-## 🏗️ 架构设计
-
-```mermaid
-flowchart TB
-    subgraph Interface["CLI / MCP Interface"]
-        CLI[contextweaver CLI]
-        MCP[MCP Server]
-    end
-
-    subgraph Search["SearchService"]
-        VR[Vector Retrieval]
-        LR[Lexical Retrieval]
-        RRF[RRF Fusion + Rerank]
-        VR --> RRF
-        LR --> RRF
-    end
-
-    subgraph Expand["Context Expansion"]
-        GE[GraphExpander]
-        CP[ContextPacker]
-        GE --> CP
-    end
-
-    subgraph Storage["Storage Layer"]
-        VS[(VectorStore<br/>LanceDB)]
-        DB[(SQLite<br/>FTS5)]
-    end
-
-    subgraph Index["Indexing Pipeline"]
-        CR[Crawler<br/>fdir] --> SS[SemanticSplitter<br/>Tree-sitter] --> IX[Indexer<br/>Batch Embedding]
-    end
-
-    subgraph Enhancer["Prompt Enhancer"]
-        PE[enhancePrompt]
-        LLM[LLM Adapters<br/>OpenAI / Claude / Gemini]
-        WEB[Web UI Server]
-        PE --> LLM
-        PE --> WEB
-    end
-
-    Interface --> Search
-    Interface --> Enhancer
-    RRF --> GE
-    Search <--> Storage
-    Expand <--> Storage
-    Index --> Storage
-```
-
-### 核心模块说明
-
-| 模块                 | 职责                                                   |
-| -------------------- | ------------------------------------------------------ |
-| **SearchService**    | 混合搜索核心，协调向量/词法召回、RRF 融合、Rerank 精排 |
-| **GraphExpander**    | 上下文扩展器，执行 E1/E2/E3 三阶段扩展策略             |
-| **ContextPacker**    | 上下文打包器，负责段落合并和 Token 预算控制            |
-| **VectorStore**      | LanceDB 适配层，管理向量索引的增删改查                 |
-| **SQLite (FTS5)**    | 元数据存储 + 全文搜索索引                              |
-| **SemanticSplitter** | AST 语义分片器，基于 Tree-sitter 解析                  |
-| **Prompt Enhancer**  | 提示词增强，多 LLM 适配，Web UI 交互                   |
-
-## 📁 项目结构
-
-```
-contextweaver/
-├── src/
-│   ├── index.ts              # CLI 入口
-│   ├── config.ts             # 配置管理（环境变量）
-│   ├── api/                  # 外部 API 封装
-│   │   ├── embed.ts          # Embedding API
-│   │   └── rerank.ts         # Reranker API
-│   ├── chunking/             # 语义分片
-│   │   ├── SemanticSplitter.ts   # AST 语义分片器
-│   │   ├── SourceAdapter.ts      # 源码适配器
-│   │   ├── LanguageSpec.ts       # 语言规范定义
-│   │   └── ParserPool.ts        # Tree-sitter 解析器池
-│   ├── scanner/              # 文件扫描
-│   │   ├── crawler.ts        # 文件系统遍历
-│   │   ├── processor.ts      # 文件处理
-│   │   └── filter.ts         # 过滤规则
-│   ├── indexer/              # 索引器
-│   │   └── index.ts          # 批量索引逻辑
-│   ├── vectorStore/          # 向量存储
-│   │   └── index.ts          # LanceDB 适配层
-│   ├── db/                   # 数据库
-│   │   └── index.ts          # SQLite + FTS5
-│   ├── search/               # 搜索服务
-│   │   ├── SearchService.ts  # 核心搜索服务
-│   │   ├── GraphExpander.ts  # 上下文扩展器
-│   │   ├── ContextPacker.ts  # 上下文打包器
-│   │   ├── fts.ts            # 全文搜索
-│   │   ├── config.ts         # 搜索配置
-│   │   ├── types.ts          # 类型定义
-│   │   └── resolvers/        # 多语言 Import 解析器
-│   ├── enhancer/             # Prompt Enhancer（提示词增强）
-│   │   ├── index.ts          # 增强服务编排
-│   │   ├── template.ts       # 模板管理
-│   │   ├── detect.ts         # 语言检测
-│   │   ├── parser.ts         # 响应解析
-│   │   ├── llmClient.ts      # LLM 客户端接口 + 工厂
-│   │   ├── server.ts         # Web UI HTTP 服务器
-│   │   ├── ui.ts             # 前端页面模板
-│   │   ├── browser.ts        # 浏览器启动
-│   │   └── adapters/         # LLM API 适配器
-│   │       ├── openai.ts
-│   │       ├── claude.ts
-│   │       └── gemini.ts
-│   ├── mcp/                  # MCP 服务端
-│   │   ├── server.ts         # MCP 服务器实现
-│   │   ├── main.ts           # MCP 入口
-│   │   └── tools/
-│   │       ├── codebaseRetrieval.ts  # 代码检索工具
-│   │       └── enhancePrompt.ts      # 提示词增强工具
-│   └── utils/                # 工具函数
-│       └── logger.ts         # 日志系统
-├── tests/                    # 单元测试
-├── package.json
-├── tsconfig.json
-└── vitest.config.ts
-```
-
-## ⚙️ 配置详解
-
-### 环境变量
-
-| 变量名                       | 必需 | 默认值   | 描述                                   |
-| ---------------------------- | ---- | -------- | -------------------------------------- |
-| `EMBEDDINGS_API_KEY`         | ✅   | -        | Embedding API 密钥                     |
-| `EMBEDDINGS_BASE_URL`        | ✅   | -        | Embedding API 地址                     |
-| `EMBEDDINGS_MODEL`           | ✅   | -        | Embedding 模型名称                     |
-| `EMBEDDINGS_MAX_CONCURRENCY` | ❌   | 10       | Embedding 并发数                       |
-| `EMBEDDINGS_DIMENSIONS`      | ❌   | 1024     | 向量维度                               |
-| `RERANK_API_KEY`             | ✅   | -        | Reranker API 密钥                      |
-| `RERANK_BASE_URL`            | ✅   | -        | Reranker API 地址                      |
-| `RERANK_MODEL`               | ✅   | -        | Reranker 模型名称                      |
-| `RERANK_TOP_N`               | ❌   | 20       | Rerank 返回数量                        |
-| `PROMPT_ENHANCER_ENDPOINT`   | ❌   | `openai` | 增强端点（openai/claude/gemini）       |
-| `PROMPT_ENHANCER_TOKEN`      | ❌\* | -        | 增强 API 密钥（\*使用 enhance 时必填） |
-| `PROMPT_ENHANCER_BASE_URL`   | ❌   | 按端点   | 自定义增强 API 地址                    |
-| `PROMPT_ENHANCER_MODEL`      | ❌   | 按端点   | 自定义增强模型                         |
-| `PROMPT_ENHANCER_TEMPLATE`   | ❌   | -        | 自定义增强模板路径                     |
-
-### 项目配置文件
-
-| 文件            | 作用                                                                             |
-| --------------- | -------------------------------------------------------------------------------- |
-| `cwconfig.json` | 项目级索引范围配置，支持 `indexing.includePatterns` 和 `indexing.ignorePatterns` |
-
-`cwconfig.json` 的过滤顺序为：内置默认排除 → `includePatterns` → `ignorePatterns` → `.gitignore` → 扩展名白名单。
-
-### 搜索配置参数
-
-```typescript
-interface SearchConfig {
-  // === 召回阶段 ===
-  vectorTopK: number; // 向量召回数量（默认 30）
-  vectorTopM: number; // 送入融合的向量结果数（默认 30）
-  ftsTopKFiles: number; // FTS 召回文件数（默认 15）
-  lexChunksPerFile: number; // 每文件词法 chunks 数（默认 3）
-  lexTotalChunks: number; // 词法总 chunks 数（默认 30）
-
-  // === 融合阶段 ===
-  rrfK0: number; // RRF 平滑常数（默认 60）
-  wVec: number; // 向量权重（默认 1.0）
-  wLex: number; // 词法权重（默认 0.5）
-  fusedTopM: number; // 融合后送 rerank 数量（默认 40）
-
-  // === Rerank ===
-  rerankTopN: number; // Rerank 后保留数量（默认 10）
-  maxRerankChars: number; // Rerank 文本最大字符数（默认 1200）
-
-  // === 扩展策略 ===
-  neighborHops: number; // E1 邻居跳数（默认 2）
-  breadcrumbExpandLimit: number; // E2 面包屑补全数（默认 3）
-  importFilesPerSeed: number; // E3 每 seed 导入文件数（默认 0）
-  chunksPerImportFile: number; // E3 每导入文件 chunks（默认 0）
-
-  // === Smart TopK ===
-  enableSmartTopK: boolean; // 启用智能截断（默认 true）
-  smartTopScoreRatio: number; // 动态阈值比例（默认 0.5）
-  smartMinScore: number; // 绝对下限（默认 0.25）
-  smartMinK: number; // Safe Harbor 数量（默认 2）
-  smartMaxK: number; // 硬上限（默认 15）
-}
-```
-
-## 🌍 多语言支持
-
-当前默认只把“能够稳定产出可检索 chunk”的文件类型纳入索引候选：`.ts`、`.tsx`、`.js`、`.jsx`、`.mjs`、`.cjs`、`.py`、`.go`、`.rs`、`.java`、`.c`、`.h`、`.cpp`、`.cc`、`.cxx`、`.hpp`、`.md`、`.json`。
-
-ContextWeaver 通过 Tree-sitter 原生支持以下编程语言的 AST 解析：
-
-| 语言       | AST 解析 | Import 解析 | 文件扩展名                    |
-| ---------- | -------- | ----------- | ----------------------------- |
-| TypeScript | ✅       | ✅          | `.ts`, `.tsx`                 |
-| JavaScript | ✅       | ✅          | `.js`, `.jsx`, `.mjs`         |
-| Python     | ✅       | ✅          | `.py`                         |
-| Go         | ✅       | ✅          | `.go`                         |
-| Java       | ✅       | ✅          | `.java`                       |
-| Rust       | ✅       | ✅          | `.rs`                         |
-| C          | ✅       | ✅          | `.c`, `.h`                    |
-| C++        | ✅       | ✅          | `.cpp`, `.hpp`, `.cc`, `.cxx` |
-| C#         | ✅       | ✅          | `.cs`                         |
-
-其他语言会采用基于行的 Fallback 分片策略，仍可正常索引和搜索。
-
-## 🔄 工作流程
-
-### 索引流程
-
-```
-1. Crawler     → 遍历文件系统，过滤忽略项
-2. Processor   → 读取文件内容，计算 hash
-3. Splitter    → AST 解析，语义分片
-4. Indexer     → 批量 Embedding，写入向量库
-5. FTS Index   → 更新全文搜索索引
-```
-
-### 搜索流程
-
-```
-1. Query Parse     → 解析查询，分离语义和术语
-2. Hybrid Recall   → 向量 + 词法双路召回
-3. RRF Fusion      → Reciprocal Rank Fusion 融合
-4. Rerank          → 交叉编码器精排
-5. Smart Cutoff    → 智能分数截断
-6. Graph Expand    → 邻居/面包屑/导入扩展
-7. Context Pack    → 段落合并，Token 预算
-8. Format Output   → 格式化返回给 LLM
-```
-
-## 📊 性能特性
-
-- **增量索引**：只处理变更文件，二次索引速度提升 10x+
-- **批量 Embedding**：自适应批次大小，支持并发控制
-- **速率限制恢复**：429 错误时自动退避，渐进恢复
-- **连接池复用**：Tree-sitter 解析器池化复用
-- **文件索引缓存**：GraphExpander 文件路径索引 lazy load
-
-## 🧪 测试
-
-```bash
-# 运行测试
-pnpm test
-
-# 监听模式
-pnpm test:watch
-```
-
-## 🐛 日志与调试
-
-日志文件位置：`~/.contextweaver/logs/app.YYYY-MM-DD.log`
-
-设置日志级别：
-
-```bash
-# 开启 debug 日志
-LOG_LEVEL=debug contextweaver search --information-request "..."
-```
-
-## 📄 开源协议
-
-本项目采用 MIT 许可证。
-
-- 仓库当前保留了上游项目的 MIT 许可文本
-- fork 后继续发布时，至少应继续附带现有 `LICENSE` 中的许可声明与版权声明
-
-## 🙏 致谢
-
-- [hsingjui/ContextWeaver](https://github.com/hsingjui/ContextWeaver) - 原始项目
-- [Tree-sitter](https://tree-sitter.github.io/tree-sitter/) - 高性能语法解析
-- [LanceDB](https://lancedb.com/) - 嵌入式向量数据库
-- [MCP](https://modelcontextprotocol.io/) - Model Context Protocol
-- [SiliconFlow](https://siliconflow.cn/) - 推荐的 Embedding/Reranker API 服务
-
----
-
-<p align="center">
-  <sub>Made with ❤️ for AI-assisted coding</sub>
-</p>
+MIT

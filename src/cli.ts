@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { stdin, stdout } from 'node:process';
 import { createInterface } from 'node:readline/promises';
+import { fileURLToPath } from 'node:url';
 import { getExcludePatterns } from './config.js';
 import { getProjectIdentity, type ProjectIdentity } from './db/index.js';
 import {
@@ -25,6 +26,56 @@ import { logger } from './utils/logger.js';
 
 function getBaseDir(): string {
   return path.join(os.homedir(), '.contextweaver');
+}
+
+function getPackageRootDir(): string {
+  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+}
+
+async function pathExists(targetPath: string): Promise<boolean> {
+  try {
+    await fs.access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function resolveSkillInstallTarget(options: { cwd: string; targetDir?: string }): string {
+  if (options.targetDir) {
+    return path.resolve(options.cwd, options.targetDir);
+  }
+
+  return options.cwd;
+}
+
+export async function installBundledSkills(options: {
+  targetDir: string;
+  force: boolean;
+}): Promise<Array<{ name: string; targetPath: string }>> {
+  const bundledSkillsDir = path.join(getPackageRootDir(), 'skills');
+  const entries = await fs.readdir(bundledSkillsDir, { withFileTypes: true });
+  const skillDirs = entries.filter((entry) => entry.isDirectory());
+
+  await fs.mkdir(options.targetDir, { recursive: true });
+
+  const installed: Array<{ name: string; targetPath: string }> = [];
+  for (const entry of skillDirs) {
+    const sourcePath = path.join(bundledSkillsDir, entry.name);
+    const targetPath = path.join(options.targetDir, entry.name);
+
+    if (await pathExists(targetPath)) {
+      if (!options.force) {
+        throw new Error(`skill directory already exists: ${targetPath}`);
+      }
+      await fs.rm(targetPath, { recursive: true, force: true });
+    }
+
+    await fs.cp(sourcePath, targetPath, { recursive: true });
+    installed.push({ name: entry.name, targetPath });
+  }
+
+  return installed;
 }
 
 async function defaultConfirmDelete(count: number): Promise<boolean> {

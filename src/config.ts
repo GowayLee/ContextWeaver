@@ -19,7 +19,7 @@ import dotenv from 'dotenv';
 
 const isDev = process.env.NODE_ENV === 'dev';
 
-// MCP 模式检测：通过命令行参数判断（contextweaver mcp）
+// 兼容 logger 的非交互模式检测；当前已不再暴露 MCP 命令。
 export const isMcpMode = process.argv.includes('mcp');
 
 function loadEnv(): void {
@@ -66,14 +66,6 @@ export interface RerankerConfig {
   baseUrl: string;
   model: string;
   topN: number;
-}
-
-export interface EnhancerConfig {
-  endpoint: 'openai' | 'claude' | 'gemini';
-  baseUrl: string;
-  apiKey: string;
-  model?: string;
-  templatePath?: string;
 }
 
 // API 配置获取
@@ -140,24 +132,6 @@ export function checkRerankerEnv(): EnvCheckResult {
 }
 
 /**
- * 检查 Prompt Enhancer 相关环境变量是否已配置（不抛出错误）
- * @returns 检查结果，包含是否有效和缺失的变量列表
- */
-export function checkEnhancerEnv(): EnvCheckResult {
-  const missingVars: string[] = [];
-
-  const apiKey = process.env.PROMPT_ENHANCER_TOKEN;
-  if (!apiKey || apiKey === DEFAULT_API_KEY_PLACEHOLDER) {
-    missingVars.push('PROMPT_ENHANCER_TOKEN');
-  }
-
-  return {
-    isValid: missingVars.length === 0,
-    missingVars,
-  };
-}
-
-/**
  * 获取 Embedding 配置
  * @throws 如果必需的配置项缺失
  */
@@ -213,80 +187,6 @@ export function getRerankerConfig(): RerankerConfig {
     baseUrl,
     model,
     topN: Number.isNaN(topN) ? 10 : topN,
-  };
-}
-
-/**
- * Enhancer endpoint defaults — single source of truth.
- * Do NOT duplicate these values elsewhere.
- */
-export const ENHANCER_DEFAULTS: Record<
-  EnhancerConfig['endpoint'],
-  { baseUrl: string; model: string }
-> = {
-  openai: {
-    baseUrl: 'https://api.openai.com/v1/chat/completions',
-    model: 'gpt-4o-mini',
-  },
-  claude: {
-    baseUrl: 'https://api.anthropic.com/v1/messages',
-    model: 'claude-sonnet-4-20250514',
-  },
-  gemini: {
-    baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
-    model: 'gemini-2.0-flash',
-  },
-};
-
-/** Default Web UI timeout: 8 minutes */
-const DEFAULT_WEBUI_TIMEOUT_MS = 8 * 60 * 1000;
-const MIN_WEBUI_TIMEOUT_MS = 30_000;
-const MAX_WEBUI_TIMEOUT_MS = 3_600_000;
-
-/**
- * Get the Web UI session timeout (ms), configurable via
- * `PROMPT_ENHANCER_WEBUI_TIMEOUT_MS`. Clamped to [30s, 60min].
- */
-export function getEnhancerWebUiTimeoutMs(): number {
-  const raw = process.env.PROMPT_ENHANCER_WEBUI_TIMEOUT_MS;
-  if (!raw) return DEFAULT_WEBUI_TIMEOUT_MS;
-
-  const parsed = parseInt(raw, 10);
-  if (Number.isNaN(parsed)) return DEFAULT_WEBUI_TIMEOUT_MS;
-
-  return Math.max(MIN_WEBUI_TIMEOUT_MS, Math.min(MAX_WEBUI_TIMEOUT_MS, parsed));
-}
-
-/**
- * 获取 Prompt Enhancer 配置
- * @throws 如果必需的配置项缺失
- */
-export function getEnhancerConfig(): EnhancerConfig {
-  const endpointRaw = process.env.PROMPT_ENHANCER_ENDPOINT || 'openai';
-  const endpoint = endpointRaw.toLowerCase();
-
-  if (endpoint !== 'openai' && endpoint !== 'claude' && endpoint !== 'gemini') {
-    throw new Error(
-      `PROMPT_ENHANCER_ENDPOINT 环境变量无效: ${endpointRaw} (仅支持 openai/claude/gemini)`,
-    );
-  }
-
-  const defaults = ENHANCER_DEFAULTS[endpoint];
-
-  const apiKey = process.env.PROMPT_ENHANCER_TOKEN;
-  if (!apiKey) {
-    throw new Error('PROMPT_ENHANCER_TOKEN 环境变量未设置');
-  }
-
-  const model = process.env.PROMPT_ENHANCER_MODEL || defaults.model;
-  const baseUrl = process.env.PROMPT_ENHANCER_BASE_URL || defaults.baseUrl;
-
-  return {
-    endpoint,
-    apiKey,
-    baseUrl,
-    model,
-    templatePath: process.env.PROMPT_ENHANCER_TEMPLATE,
   };
 }
 

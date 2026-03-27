@@ -9,7 +9,9 @@ import {
   ensureProjectConfigForIndex,
   ensureSearchableProject,
   initProjectConfigCommand,
+  installBundledSkills,
   recordIndexedProject,
+  resolveSkillInstallTarget,
   runCleanIndexes,
   runIndexCommand,
 } from '../src/cli.js';
@@ -89,6 +91,49 @@ describe('cli helpers', () => {
     await expect(fs.readFile(path.join(repoRoot, 'cwconfig.json'), 'utf-8')).resolves.toBe(
       '{\n  "indexing": {\n    "includePatterns": [\n      "src/**"\n    ],\n    "ignorePatterns": []\n  }\n}\n',
     );
+  });
+
+  it('installs bundled skills into a target directory', async () => {
+    const targetDir = await createTempDir('cw-skills-target-');
+
+    const installed = await installBundledSkills({
+      targetDir,
+      force: false,
+    });
+
+    expect(installed.map((item) => item.name).sort()).toEqual([
+      'enhancing-prompts',
+      'using-contextweaver',
+    ]);
+    await expect(
+      fs.readFile(path.join(targetDir, 'using-contextweaver', 'SKILL.md'), 'utf-8'),
+    ).resolves.toContain('name: using-contextweaver');
+    await expect(
+      fs.readFile(path.join(targetDir, 'enhancing-prompts', 'SKILL.md'), 'utf-8'),
+    ).resolves.toContain('name: enhancing-prompts');
+  });
+
+  it('refuses to overwrite an installed skill directory without force', async () => {
+    const targetDir = await createTempDir('cw-skills-target-');
+
+    await installBundledSkills({ targetDir, force: false });
+
+    await expect(installBundledSkills({ targetDir, force: false })).rejects.toThrow(
+      'already exists',
+    );
+  });
+
+  it('defaults skill installation to the local opencode skill directory', () => {
+    expect(resolveSkillInstallTarget({ cwd: '/tmp/repo' })).toBe('/tmp/repo');
+  });
+
+  it('resolves an explicit skill installation directory relative to cwd', () => {
+    expect(
+      resolveSkillInstallTarget({
+        cwd: '/tmp/repo',
+        targetDir: './agent-skills',
+      }),
+    ).toBe('/tmp/repo/agent-skills');
   });
 
   it('refuses to overwrite cwconfig.json without force', async () => {

@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { detectLanguage } from '../../src/enhancer/detect.js';
+import { describe, expect, it } from 'vitest';
+import { detectLanguage } from '../../src/promptContext/detect.js';
 
 describe('detectLanguage', () => {
   it('should detect Chinese when >= 3 Chinese characters present', () => {

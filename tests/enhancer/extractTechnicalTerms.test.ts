@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { extractTechnicalTerms } from '../../src/enhancer/index.js';
+import { describe, expect, it } from 'vitest';
+import { extractTechnicalTerms } from '../../src/promptContext/technicalTerms.js';
 
 describe('extractTechnicalTerms', () => {
   it('should extract backtick-wrapped identifiers', () => {
@@ -9,8 +9,8 @@ describe('extractTechnicalTerms', () => {
   });
 
   it('should extract backtick-wrapped file paths', () => {
-    const terms = extractTechnicalTerms('Edit `src/enhancer/index.ts` for changes.');
-    expect(terms).toContain('src/enhancer/index.ts');
+    const terms = extractTechnicalTerms('Edit `src/promptContext/index.ts` for changes.');
+    expect(terms).toContain('src/promptContext/index.ts');
   });
 
   it('should extract file paths with extensions', () => {
@@ -26,8 +26,8 @@ describe('extractTechnicalTerms', () => {
   });
 
   it('should extract camelCase identifiers', () => {
-    const terms = extractTechnicalTerms('Call handleCodebaseRetrieval for context.');
-    expect(terms).toContain('handleCodebaseRetrieval');
+    const terms = extractTechnicalTerms('Call buildPromptContext for context.');
+    expect(terms).toContain('buildPromptContext');
   });
 
   it('should extract snake_case identifiers', () => {
@@ -43,8 +43,10 @@ describe('extractTechnicalTerms', () => {
   });
 
   it('should limit to MAX_TERMS (20)', () => {
-    // Generate 25 unique backtick terms
-    const items = Array.from({ length: 25 }, (_, i) => `\`Term${String(i).padStart(3, '0')}Value\``);
+    const items = Array.from(
+      { length: 25 },
+      (_, i) => `\`Term${String(i).padStart(3, '0')}Value\``,
+    );
     const terms = extractTechnicalTerms(items.join(' '));
     expect(terms.length).toBeLessThanOrEqual(20);
   });
@@ -63,13 +65,13 @@ describe('extractTechnicalTerms', () => {
   it('should handle mixed content', () => {
     const prompt = `
       Fix the \`SearchService\` in src/search/SearchService.ts.
-      The handleCodebaseRetrieval function should use technical_terms.
+      The buildPromptContext function should use technical_terms.
       Also check ContextPacker and GraphExpander.
     `;
     const terms = extractTechnicalTerms(prompt);
     expect(terms).toContain('SearchService');
     expect(terms).toContain('src/search/SearchService.ts');
-    expect(terms).toContain('handleCodebaseRetrieval');
+    expect(terms).toContain('buildPromptContext');
     expect(terms).toContain('technical_terms');
     expect(terms).toContain('ContextPacker');
     expect(terms).toContain('GraphExpander');

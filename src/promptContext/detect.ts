@@ -3,4 +3,3 @@ export function detectLanguage(text: string): 'zh' | 'en' {
   const count = matches?.length ?? 0;
   return count >= 3 ? 'zh' : 'en';
 }
-

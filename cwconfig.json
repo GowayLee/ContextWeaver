@@ -1,0 +1,6 @@
+{
+  "indexing": {
+    "includePatterns": ["src/**", "skills/**"],
+    "ignorePatterns": []
+  }
+}

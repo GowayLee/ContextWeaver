@@ -7,7 +7,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import cac from 'cac';
-import { initProjectConfigCommand, runCleanIndexes, runIndexCommand } from './cli.js';
+import {
+  initProjectConfigCommand,
+  installBundledSkills,
+  resolveSkillInstallTarget,
+  runCleanIndexes,
+  runIndexCommand,
+} from './cli.js';
 import { logger } from './utils/logger.js';
 
 // 读取 package.json 获取版本号
@@ -68,12 +74,6 @@ RERANK_BASE_URL=https://api.siliconflow.cn/v1/rerank
 RERANK_MODEL=BAAI/bge-reranker-v2-m3
 RERANK_TOP_N=20
 
-# Prompt Enhancer 配置（可选，使用 enhance 命令时需要）
-# PROMPT_ENHANCER_ENDPOINT=openai
-# PROMPT_ENHANCER_BASE_URL=
-# PROMPT_ENHANCER_TOKEN=your-api-key-here
-# PROMPT_ENHANCER_MODEL=
-# PROMPT_ENHANCER_TEMPLATE=
 `;
   try {
     await fs.writeFile(envFile, defaultEnvContent);
@@ -139,6 +139,33 @@ cli
   });
 
 cli
+  .command('install-skills', '安装内置 Skill 到目标目录')
+  .option('--dir <path>', '安装目录（默认当前目录）')
+  .option('-f, --force', '覆盖已存在的 Skill 目录')
+  .action(async (options: { dir?: string; force?: boolean }) => {
+    try {
+      const resolvedTarget = resolveSkillInstallTarget({
+        cwd: process.cwd(),
+        targetDir: options.dir,
+      });
+
+      const installed = await installBundledSkills({
+        targetDir: resolvedTarget,
+        force: options.force === true,
+      });
+
+      logger.info(`已安装 ${installed.length} 个 Skill 到: ${resolvedTarget}`);
+      for (const skill of installed) {
+        logger.info(`- ${skill.name}`);
+      }
+    } catch (err) {
+      const error = err as { message?: string; stack?: string };
+      logger.error({ err, stack: error.stack }, `安装 Skill 失败: ${error.message}`);
+      process.exit(1);
+    }
+  });
+
+cli
   .command('clean', '交互式清理失效索引')
   .option('-y, --yes', '跳过确认，直接删除失效索引')
   .option('--dry-run', '仅显示待清理索引，不执行删除')
@@ -167,87 +194,18 @@ cli
     }
   });
 
-cli.command('mcp', '启动 MCP 服务器').action(async () => {
-  // 动态导入并启动 MCP 服务器
-  const { startMcpServer } = await import('./mcp/server.js');
-  try {
-    await startMcpServer();
-  } catch (err) {
-    const error = err as { message?: string; stack?: string };
-    logger.error(
-      { error: error.message, stack: error.stack },
-      `MCP 服务器启动失败: ${error.message}`,
-    );
-    process.exit(1);
-  }
-});
-
-cli
-  .command('enhance <prompt>', '增强提示词')
-  .option('--no-browser', '直接输出到终端，不启动浏览器')
-  .option('--endpoint <type>', '指定 API 端点 (openai/claude/gemini)')
-  .action(
-    async (
-      prompt: string,
-      options: {
-        browser?: boolean;
-        endpoint?: string;
-      },
-    ) => {
-      const endpointRaw = options.endpoint?.toLowerCase();
-      const endpointOverride =
-        endpointRaw === 'openai' || endpointRaw === 'claude' || endpointRaw === 'gemini'
-          ? endpointRaw
-          : undefined;
-
-      if (options.browser === false) {
-        const { enhancePrompt } = await import('./enhancer/index.js');
-        try {
-          const result = await enhancePrompt({ prompt, endpointOverride });
-          process.stdout.write(`${result.enhanced}\n`);
-        } catch (err) {
-          const error = err as { message?: string; stack?: string };
-          logger.error(
-            { error: error.message, stack: error.stack },
-            `enhance 失败: ${error.message}`,
-          );
-          process.exit(1);
-        }
-        return;
-      }
-
-      const { startEnhanceServer } = await import('./enhancer/server.js');
-      const { openBrowser } = await import('./enhancer/browser.js');
-
-      try {
-        const result = await startEnhanceServer(prompt, {
-          endpointOverride,
-          onStarted: (url) => {
-            openBrowser(url);
-          },
-        });
-        process.stdout.write(`${result.enhanced}\n`);
-      } catch (err) {
-        const error = err as { message?: string; stack?: string };
-        logger.error(
-          { error: error.message, stack: error.stack },
-          `enhance 失败: ${error.message}`,
-        );
-        process.exit(1);
-      }
-    },
-  );
-
 cli
   .command('search', '本地检索（参数对齐 MCP）')
   .option('--repo-path <path>', '代码库根目录（默认当前目录）')
   .option('--information-request <text>', '自然语言问题描述（必填）')
   .option('--technical-terms <terms>', '精确术语（逗号分隔）')
+  .option('--format <type>', '输出格式 (text/json)', { default: 'text' })
   .action(
     async (options: {
       repoPath?: string;
       informationRequest?: string;
       technicalTerms?: string;
+      format?: string;
     }) => {
       const repoPath = options.repoPath ? path.resolve(options.repoPath) : process.cwd();
       const informationRequest = options.informationRequest;
@@ -261,20 +219,60 @@ cli
         .map((t) => t.trim())
         .filter(Boolean);
 
+      const format = options.format === 'json' ? 'json' : 'text';
+
       await import('./cli.js').then(({ ensureSearchableProject }) =>
         ensureSearchableProject(repoPath),
       );
 
-      const { handleCodebaseRetrieval } = await import('./mcp/tools/codebaseRetrieval.js');
+      const { renderSearchResult, retrieveCodeContext } = await import('./retrieval/index.js');
 
-      const response = await handleCodebaseRetrieval({
-        repo_path: repoPath,
-        information_request: informationRequest,
-        technical_terms: technicalTerms.length > 0 ? technicalTerms : undefined,
+      const result = await retrieveCodeContext({
+        repoPath,
+        informationRequest,
+        technicalTerms: technicalTerms.length > 0 ? technicalTerms : undefined,
       });
 
-      const text = response.content.map((item) => item.text).join('\n');
-      process.stdout.write(`${text}\n`);
+      process.stdout.write(renderSearchResult(result, format));
+    },
+  );
+
+cli
+  .command('prompt-context <prompt>', '为 prompt 增强准备仓库证据（默认输出 text）')
+  .option('--repo-path <path>', '代码库根目录（默认当前目录）')
+  .option('--paths <paths>', '显式文件路径（逗号分隔）')
+  .option('--symbols <symbols>', '显式符号（逗号分隔）')
+  .option('--format <type>', '输出格式 (text/json)', { default: 'text' })
+  .action(
+    async (
+      prompt: string,
+      options: {
+        repoPath?: string;
+        paths?: string;
+        symbols?: string;
+        format?: string;
+      },
+    ) => {
+      const repoPath = options.repoPath ? path.resolve(options.repoPath) : process.cwd();
+      const explicitPaths = (options.paths || '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+      const explicitSymbols = (options.symbols || '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+      const { buildPromptContext, renderPromptContext } = await import('./promptContext/index.js');
+      const result = await buildPromptContext({
+        prompt,
+        repoPath,
+        explicitPaths,
+        explicitSymbols,
+      });
+
+      const format = options.format === 'json' ? 'json' : 'text';
+      process.stdout.write(renderPromptContext(result, format));
     },
   );
 
