@@ -3,14 +3,17 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  buildIndexPreview,
   buildIndexScopeLogLines,
   deleteIndexedProjectDirectory,
+  ensureProjectConfigForIndex,
+  ensureSearchableProject,
   initProjectConfigCommand,
   recordIndexedProject,
   runCleanIndexes,
   runIndexCommand,
 } from '../src/cli.js';
-import { listIndexedProjects } from '../src/indexRegistry.js';
+import { isIndexedProjectConfirmed, listIndexedProjects } from '../src/indexRegistry.js';
 
 const tempDirs: string[] = [];
 let previousHome: string | undefined;
@@ -20,6 +23,47 @@ async function createTempDir(prefix: string): Promise<string> {
   tempDirs.push(dir);
   return dir;
 }
+
+async function createRepo(options?: {
+  withConfig?: boolean;
+  files?: Record<string, string>;
+  config?: Record<string, unknown>;
+}): Promise<string> {
+  const repoRoot = await createTempDir('cw-repo-');
+  const files = options?.files ?? {
+    'src/app.ts': 'export const app = true;\n',
+    'src/config.json': '{"ok":true}\n',
+    'src/nested/util.ts': 'export const util = true;\n',
+  };
+
+  await Promise.all(
+    Object.entries(files).map(async ([relativePath, content]) => {
+      const fullPath = path.join(repoRoot, relativePath);
+      await fs.mkdir(path.dirname(fullPath), { recursive: true });
+      await fs.writeFile(fullPath, content, 'utf-8');
+    }),
+  );
+
+  if (options?.withConfig !== false) {
+    await fs.writeFile(
+      path.join(repoRoot, 'cwconfig.json'),
+      JSON.stringify(options?.config ?? { indexing: { includePatterns: ['src/**'] } }, null, 2),
+      'utf-8',
+    );
+  }
+
+  return repoRoot;
+}
+
+const mockStats = {
+  totalFiles: 3,
+  added: 3,
+  modified: 0,
+  unchanged: 0,
+  deleted: 0,
+  skipped: 0,
+  errors: 0,
+};
 
 beforeEach(async () => {
   previousHome = process.env.HOME;
@@ -43,7 +87,7 @@ describe('cli helpers', () => {
     await initProjectConfigCommand({ cwd: repoRoot, force: false });
 
     await expect(fs.readFile(path.join(repoRoot, 'cwconfig.json'), 'utf-8')).resolves.toBe(
-      '{\n  "indexing": {\n    "ignorePatterns": []\n  }\n}\n',
+      '{\n  "indexing": {\n    "includePatterns": [\n      "src/**"\n    ],\n    "ignorePatterns": []\n  }\n}\n',
     );
   });
 
@@ -71,7 +115,7 @@ describe('cli helpers', () => {
       '  - include: <empty>',
       '  - ignore (project): <none>',
       '  - ignore (.gitignore at repo root): enabled',
-      '  - ignore (built-in): enabled',
+      '  - ignore (built-in): node_modules, .git, .svn, .hg, .idea, .vscode, .vs, .venv, venv',
       '  - always excluded: cwconfig.json',
       '  - warning: current config yields an empty indexing scope',
     ]);
@@ -188,7 +232,7 @@ describe('cli helpers', () => {
   });
 
   it('runs the index command flow and surfaces registry write failures', async () => {
-    const repoRoot = await createTempDir('cw-repo-');
+    const repoRoot = await createRepo();
     const lines: string[] = [];
     const scanFn = vi.fn().mockResolvedValue({
       totalFiles: 0,
@@ -204,6 +248,8 @@ describe('cli helpers', () => {
       runIndexCommand({
         rootPath: repoRoot,
         force: false,
+        yes: true,
+        isInteractive: false,
         logLine: (line) => lines.push(line),
         scanFn,
         recordIndexedProjectFn: async () => {
@@ -214,5 +260,115 @@ describe('cli helpers', () => {
 
     expect(scanFn).toHaveBeenCalledTimes(1);
     expect(lines).toContain('索引范围:');
+  });
+
+  it('creates cwconfig.json and aborts index when project config is missing', async () => {
+    const repoRoot = await createRepo({ withConfig: false });
+
+    const result = await ensureProjectConfigForIndex(repoRoot);
+
+    expect(result.kind).toBe('created_config');
+    expect(await fs.readFile(path.join(repoRoot, 'cwconfig.json'), 'utf-8')).toContain('src/**');
+  });
+
+  it('builds an aggregated preview of matched directories and extensions', async () => {
+    const repoRoot = await createRepo();
+
+    const preview = await buildIndexPreview(repoRoot);
+
+    expect(preview.totalFiles).toBe(3);
+    expect(preview.directorySummaries).toEqual(['src/: .json(1), .ts(2)']);
+  });
+
+  it('shows real matched file paths in the preview sample', async () => {
+    const repoRoot = await createRepo();
+
+    const preview = await buildIndexPreview(repoRoot);
+
+    expect(preview.samplePaths).toEqual(['src/app.ts', 'src/config.json', 'src/nested/util.ts']);
+  });
+
+  it('does not start indexing when preview confirmation is rejected', async () => {
+    const repoRoot = await createRepo();
+    const scanFn = vi.fn();
+
+    await expect(
+      runIndexCommand({
+        rootPath: repoRoot,
+        force: false,
+        isInteractive: true,
+        confirmIndex: async () => false,
+        scanFn,
+      }),
+    ).rejects.toThrow('Index confirmation declined');
+    expect(scanFn).not.toHaveBeenCalled();
+  });
+
+  it('renders actual matched paths before asking for confirmation', async () => {
+    const repoRoot = await createRepo();
+    const lines: string[] = [];
+
+    await expect(
+      runIndexCommand({
+        rootPath: repoRoot,
+        force: false,
+        isInteractive: true,
+        logLine: (line) => lines.push(line),
+        confirmIndex: async () => false,
+      }),
+    ).rejects.toThrow('Index confirmation declined');
+
+    expect(lines).toContain('- src/app.ts');
+  });
+
+  it('refuses non-interactive index preview without --yes', async () => {
+    const repoRoot = await createRepo();
+
+    await expect(
+      runIndexCommand({
+        rootPath: repoRoot,
+        force: false,
+        isInteractive: false,
+      }),
+    ).rejects.toThrow('--yes');
+  });
+
+  it('fails fast when the current config matches no indexable files', async () => {
+    const repoRoot = await createRepo({
+      config: { indexing: { includePatterns: ['docs/**'] } },
+      files: { 'docs/readme.txt': 'hello\n' },
+    });
+
+    await expect(
+      runIndexCommand({
+        rootPath: repoRoot,
+        force: false,
+        yes: true,
+        isInteractive: false,
+      }),
+    ).rejects.toThrow('no indexable files');
+  });
+
+  it('treats --yes as explicit confirmation and records confirmedAt', async () => {
+    const repoRoot = await createRepo();
+    const scanFn = vi.fn().mockResolvedValue(mockStats);
+
+    await runIndexCommand({
+      rootPath: repoRoot,
+      force: false,
+      yes: true,
+      isInteractive: false,
+      scanFn,
+    });
+
+    const projects = await listIndexedProjects();
+    expect(projects).toHaveLength(1);
+    expect(await isIndexedProjectConfirmed(projects[0]!.projectId)).toBe(true);
+  });
+
+  it('rejects local search when the repo has never completed confirmed indexing', async () => {
+    const repoRoot = await createRepo();
+
+    await expect(ensureSearchableProject(repoRoot)).rejects.toThrow('cw index');
   });
 });

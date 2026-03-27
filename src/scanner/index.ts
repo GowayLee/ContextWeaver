@@ -60,6 +60,8 @@ export interface ScanOptions {
   vectorIndex?: boolean;
   /** 进度回调 */
   onProgress?: ProgressCallback;
+  /** 预先计算好的待扫描文件绝对路径 */
+  precomputedFilePaths?: string[];
 }
 
 /**
@@ -110,7 +112,7 @@ export async function scan(rootPath: string, options: ScanOptions = {}): Promise
     const knownFiles = getAllFileMeta(db);
 
     // 扫描文件系统
-    const filePaths = await crawl(rootPath);
+    const filePaths = options.precomputedFilePaths ?? (await crawl(rootPath)).filePaths;
     // 使用 path.relative 确保跨平台兼容，并标准化为 / 分隔符
     const scannedPaths = new Set(
       filePaths.map((p) => path.relative(rootPath, p).replace(/\\/g, '/')),

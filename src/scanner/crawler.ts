@@ -1,6 +1,11 @@
 import { fdir } from 'fdir';
 import { isAllowedFile, isFiltered, isIncluded } from './filter.js';
 
+export interface CrawlResult {
+  filePaths: string[];
+  relativePaths: string[];
+}
+
 /**
  * 转义正则表达式特殊字符
  */
@@ -11,7 +16,8 @@ function escapeRegExp(str: string): string {
 /**
  * 使用 fdir 扫描文件系统
  */
-export async function crawl(rootPath: string): Promise<string[]> {
+export async function crawl(rootPath: string): Promise<CrawlResult> {
+  const relativePaths: string[] = [];
   const api = new fdir()
     .withFullPaths()
     .withErrors()
@@ -23,9 +29,14 @@ export async function crawl(rootPath: string): Promise<string[]> {
         new RegExp(`^${escapeRegExp(normalizedRootPath)}/?`),
         '',
       );
-      return isIncluded(relativePath) && !isFiltered(relativePath) && isAllowedFile(filePath);
+      const matched =
+        isIncluded(relativePath) && !isFiltered(relativePath) && isAllowedFile(relativePath);
+      if (matched) {
+        relativePaths.push(relativePath);
+      }
+      return matched;
     });
 
-  const paths = await api.crawl(rootPath).withPromise();
-  return paths;
+  const filePaths = await api.crawl(rootPath).withPromise();
+  return { filePaths, relativePaths };
 }

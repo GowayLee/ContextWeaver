@@ -6,6 +6,7 @@ import { getProjectIdentity } from '../src/db/index.js';
 import {
   formatProjectIndexingScope,
   getDefaultProjectConfig,
+  getRecommendedProjectConfigTemplate,
   loadProjectConfig,
   stringifyProjectConfig,
 } from '../src/projectConfig.js';
@@ -150,6 +151,19 @@ describe('project config helpers', () => {
         ignorePatterns: [],
       },
     });
+  });
+
+  it('keeps runtime defaults permissive but writes a recommended src template', () => {
+    expect(getDefaultProjectConfig()).toEqual({
+      indexing: {
+        includePatterns: null,
+        ignorePatterns: [],
+      },
+    });
+
+    expect(stringifyProjectConfig(getRecommendedProjectConfigTemplate())).toBe(
+      '{\n  "indexing": {\n    "includePatterns": [\n      "src/**"\n    ],\n    "ignorePatterns": []\n  }\n}\n',
+    );
   });
 
   it('stringifies the default project config without includePatterns', () => {

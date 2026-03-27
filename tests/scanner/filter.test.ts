@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { crawl } from '../../src/scanner/crawler.js';
-import { initFilter, isFiltered, isIncluded } from '../../src/scanner/filter.js';
+import { initFilter, isAllowedFile, isFiltered, isIncluded } from '../../src/scanner/filter.js';
 
 const tempDirs: string[] = [];
 
@@ -104,17 +104,27 @@ describe('scanner filter', () => {
     expect(isFiltered('src/generated/schema.ts')).toBe(true);
   });
 
-  it('does not allow includePatterns to re-include built-in excluded files', async () => {
+  it('treats dist and generated as project-config responsibilities, not hard excludes', async () => {
     const repoRoot = await createRepo({
       cwconfig: {
-        indexing: { includePatterns: ['dist/**'] },
+        indexing: { includePatterns: ['dist/**', 'generated/**'] },
+      },
+      files: {
+        'dist/index.js': 'export const built = true;\n',
+        'generated/schema.json': '{"ok":true}\n',
       },
     });
 
     await initFilter(repoRoot);
 
-    expect(isIncluded('dist/index.ts')).toBe(true);
-    expect(isFiltered('dist/index.ts')).toBe(true);
+    expect(isFiltered('dist/index.js')).toBe(false);
+    expect(isFiltered('generated/schema.json')).toBe(false);
+  });
+
+  it('rejects file types that are not in the retrievable chunk allowlist', async () => {
+    expect(isAllowedFile('src/app.ts')).toBe(true);
+    expect(isAllowedFile('scripts/dev.sh')).toBe(false);
+    expect(isAllowedFile('config/site.yaml')).toBe(false);
   });
 
   it('does not allow includePatterns to re-include gitignored files', async () => {
@@ -192,7 +202,7 @@ describe('scanner filter', () => {
     expect(isFiltered('examples/cwconfig.json')).toBe(false);
   });
 
-  it('does not let gitignore negation override built-in or project ignores', async () => {
+  it('does not let gitignore negation override project ignores or root cwconfig exclusion', async () => {
     const repoRoot = await createRepo({
       cwconfig: {
         indexing: {
@@ -206,7 +216,7 @@ describe('scanner filter', () => {
 
     await initFilter(repoRoot);
 
-    expect(isFiltered('dist/index.ts')).toBe(true);
+    expect(isFiltered('dist/index.ts')).toBe(false);
     expect(isFiltered('src/generated/schema.ts')).toBe(true);
     expect(isFiltered('cwconfig.json')).toBe(true);
   });
@@ -231,11 +241,10 @@ describe('scanner filter', () => {
 
     await initFilter(repoRoot);
     const result = await crawl(repoRoot);
-    const relativePaths = result
-      .map((file) => path.relative(repoRoot, file).replace(/\\/g, '/'))
-      .sort();
+    const relativePaths = result.relativePaths.sort();
 
     expect(relativePaths).toEqual([
+      'dist/index.ts',
       'packages/core/src/index.ts',
       'src/app.ts',
       'src/nested/deep/file.ts',

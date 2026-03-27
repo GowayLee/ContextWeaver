@@ -53,7 +53,7 @@
 
 - **MCP Server 模式**：一键启动 Model Context Protocol 服务端
 - **意图与术语分离**：LLM 友好的 API 设计
-- **自动索引**：首次查询自动触发索引，增量更新透明无感
+- **确认式索引**：首次索引必须先预览实际匹配范围并显式确认
 
 ### ✏️ Prompt Enhancer（提示词增强）
 
@@ -136,6 +136,8 @@ contextweaver init-project --force
 }
 ```
 
+默认模板会显式写入 `includePatterns: ["src/**"]`，作为更安全的项目起点；如果你要索引更大范围，再按仓库实际结构手动调整。
+
 - `includePatterns` 先缩小候选范围；省略时默认整个仓库可参与索引
 - `includePatterns` 传空数组时表示索引范围为空
 - `ignorePatterns` 再从候选范围中剔除路径
@@ -148,7 +150,7 @@ contextweaver init-project --force
 
 - 旧的 `IGNORE_PATTERNS` 环境变量已经移除，不再兼容
 - 之前写在 shell、CI 或用户级 `.env` 中的索引过滤规则，应迁移到仓库根 `cwconfig.json`
-- 如果你的仓库没有 `cwconfig.json`，行为仍然与此前接近：默认扫描整个仓库，再叠加内置排除和项目根 `.gitignore`
+- 如果你的仓库没有 `cwconfig.json`，`cw index` 会先自动创建模板并退出，要求你检查后再继续
 
 #### 常见示例
 
@@ -182,7 +184,12 @@ contextweaver index /path/to/your/project
 contextweaver index --force
 ```
 
-开始索引前，CLI 会先打印当前仓库的索引范围摘要，包括 `includePatterns`、`ignorePatterns`、项目根 `.gitignore`、内置排除规则，以及 `cwconfig.json` 始终不会被索引这一点。
+`cw index` 现在是确认式工作流：
+
+- 缺少 `cwconfig.json` 时，会自动生成模板并立即退出
+- 正式索引前会先打印索引范围摘要，包含当前 `builtin ignore` 的实际明细，再展示“实际匹配预览”的目录/扩展名摘要和真实路径样本
+- 你确认后才会开始索引；非交互环境必须显式传 `--yes`
+- `--yes` 也会被记为一次有效确认，后续 `search` / MCP 才能静默做增量修补
 
 ### 清理失效索引
 
@@ -208,6 +215,8 @@ cw search --information-request "用户认证流程是如何实现的？"
 # 带精确术语
 cw search --information-request "数据库连接逻辑" --technical-terms "DatabasePool,Connection"
 ```
+
+首次使用本地 `search` 前，仓库必须已经成功完成过一次确认式 `cw index`；否则会直接报错，提示先执行索引确认。
 
 ### 提示词增强
 
@@ -270,6 +279,7 @@ ContextWeaver 提供两个 MCP 工具：
 - **意图与术语分离**：`information_request` 描述「做什么」，`technical_terms` 过滤「叫什么」
 - **同文件上下文优先**：默认提供同文件上下文，跨文件探索由 Agent 自主发起
 - **回归代理本能**：工具只负责定位，跨文件探索由 Agent 按需触发
+- **首次自动索引已禁用**：仓库必须先手动完成一次确认式 `cw index`，之后 MCP 才会静默做增量修补
 
 #### `enhance-prompt` 参数说明
 
@@ -473,6 +483,8 @@ interface SearchConfig {
 ```
 
 ## 🌍 多语言支持
+
+当前默认只把“能够稳定产出可检索 chunk”的文件类型纳入索引候选：`.ts`、`.tsx`、`.js`、`.jsx`、`.mjs`、`.cjs`、`.py`、`.go`、`.rs`、`.java`、`.c`、`.h`、`.cpp`、`.cc`、`.cxx`、`.hpp`、`.md`、`.json`。
 
 ContextWeaver 通过 Tree-sitter 原生支持以下编程语言的 AST 解析：
 

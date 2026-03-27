@@ -3,19 +3,23 @@ import os from 'node:os';
 import path from 'node:path';
 import { stdin, stdout } from 'node:process';
 import { createInterface } from 'node:readline/promises';
+import { getExcludePatterns } from './config.js';
 import { getProjectIdentity, type ProjectIdentity } from './db/index.js';
 import {
   findStaleIndexedProjects,
   type IndexedProjectRecord,
+  isIndexedProjectConfirmed,
   removeIndexedProjects,
   upsertIndexedProject,
 } from './indexRegistry.js';
 import {
   formatProjectIndexingScope,
-  getDefaultProjectConfig,
+  getRecommendedProjectConfigTemplate,
   loadProjectConfig,
   stringifyProjectConfig,
 } from './projectConfig.js';
+import { crawl } from './scanner/crawler.js';
+import { initFilter } from './scanner/filter.js';
 import { type ScanOptions, type ScanStats, scan } from './scanner/index.js';
 import { logger } from './utils/logger.js';
 
@@ -34,6 +38,30 @@ async function defaultConfirmDelete(count: number): Promise<boolean> {
   }
 }
 
+async function defaultConfirmIndex(): Promise<boolean> {
+  const rl = createInterface({ input: stdin, output: stdout });
+
+  try {
+    const answer = await rl.question('确认开始索引？ [y/N] ');
+    return answer.trim().toLowerCase() === 'y';
+  } finally {
+    rl.close();
+  }
+}
+
+function summarizeDirectory(relativePath: string): string {
+  const firstSlash = relativePath.indexOf('/');
+  if (firstSlash === -1) {
+    return './';
+  }
+  return `${relativePath.slice(0, firstSlash + 1)}`;
+}
+
+function getExtension(relativePath: string): string {
+  const ext = path.extname(relativePath).toLowerCase();
+  return ext || '<no-ext>';
+}
+
 export async function buildIndexScopeLogLines(rootPath: string): Promise<string[]> {
   const config = await loadProjectConfig(rootPath);
   const scope = formatProjectIndexingScope(config);
@@ -43,7 +71,7 @@ export async function buildIndexScopeLogLines(rootPath: string): Promise<string[
     `  - include: ${scope.includeSummary}`,
     `  - ignore (project): ${scope.ignoreSummary}`,
     '  - ignore (.gitignore at repo root): enabled',
-    '  - ignore (built-in): enabled',
+    `  - ignore (built-in): ${getExcludePatterns().join(', ')}`,
     '  - always excluded: cwconfig.json',
     ...(scope.hasEmptyIncludeScope
       ? ['  - warning: current config yields an empty indexing scope']
@@ -69,8 +97,80 @@ export async function initProjectConfigCommand(options: {
     }
   }
 
-  await fs.writeFile(configPath, stringifyProjectConfig(getDefaultProjectConfig()), 'utf-8');
+  await fs.writeFile(
+    configPath,
+    stringifyProjectConfig(getRecommendedProjectConfigTemplate()),
+    'utf-8',
+  );
   return configPath;
+}
+
+export async function ensureProjectConfigForIndex(
+  rootPath: string,
+): Promise<{ kind: 'ready'; configPath: string } | { kind: 'created_config'; configPath: string }> {
+  const configPath = path.join(rootPath, 'cwconfig.json');
+
+  try {
+    await fs.access(configPath);
+    return { kind: 'ready', configPath };
+  } catch (error) {
+    const err = error as NodeJS.ErrnoException;
+    if (err.code !== 'ENOENT') {
+      throw error;
+    }
+  }
+
+  await fs.writeFile(
+    configPath,
+    stringifyProjectConfig(getRecommendedProjectConfigTemplate()),
+    'utf-8',
+  );
+  return { kind: 'created_config', configPath };
+}
+
+export async function buildIndexPreview(rootPath: string): Promise<{
+  matchedFilePaths: string[];
+  totalFiles: number;
+  directorySummaries: string[];
+  extensionSummaries: string[];
+  samplePaths: string[];
+}> {
+  await initFilter(rootPath);
+  const { filePaths, relativePaths } = await crawl(rootPath);
+
+  const directoryStats = new Map<string, Map<string, number>>();
+  const extensionStats = new Map<string, number>();
+
+  for (const relativePath of relativePaths) {
+    const directory = summarizeDirectory(relativePath);
+    const extension = getExtension(relativePath);
+    const directoryEntry = directoryStats.get(directory) ?? new Map<string, number>();
+    directoryEntry.set(extension, (directoryEntry.get(extension) ?? 0) + 1);
+    directoryStats.set(directory, directoryEntry);
+    extensionStats.set(extension, (extensionStats.get(extension) ?? 0) + 1);
+  }
+
+  const directorySummaries = [...directoryStats.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([directory, extensions]) => {
+      const extensionSummary = [...extensions.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([ext, count]) => `${ext}(${count})`)
+        .join(', ');
+      return `${directory}: ${extensionSummary}`;
+    });
+
+  const extensionSummaries = [...extensionStats.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([ext, count]) => `${ext}(${count})`);
+
+  return {
+    matchedFilePaths: filePaths,
+    totalFiles: filePaths.length,
+    directorySummaries,
+    extensionSummaries,
+    samplePaths: [...relativePaths].sort().slice(0, 10),
+  };
 }
 
 export async function deleteIndexedProjectDirectory(projectId: string): Promise<void> {
@@ -91,14 +191,37 @@ export async function deleteIndexedProjectDirectory(projectId: string): Promise<
   await fs.rm(path.join(getBaseDir(), projectId), { recursive: true });
 }
 
-export async function recordIndexedProject(rootPath: string): Promise<void> {
+export async function recordIndexedProject(
+  rootPath: string,
+  options?: { confirmedAt?: string | null },
+): Promise<void> {
   const identity = getProjectIdentity(rootPath);
+  const lastIndexedAt = new Date().toISOString();
   await upsertIndexedProject({
     projectId: identity.projectId,
     projectPath: identity.projectPath,
     pathBirthtimeMs: identity.pathBirthtimeMs,
-    lastIndexedAt: new Date().toISOString(),
+    lastIndexedAt,
+    confirmedAt: options?.confirmedAt ?? null,
   });
+}
+
+export async function ensureSearchableProject(rootPath: string): Promise<void> {
+  const configPath = path.join(rootPath, 'cwconfig.json');
+  try {
+    await fs.access(configPath);
+  } catch (error) {
+    const err = error as NodeJS.ErrnoException;
+    if (err.code === 'ENOENT') {
+      throw new Error('当前仓库尚未完成确认式索引，请先运行 `cw index`。');
+    }
+    throw error;
+  }
+
+  const identity = getProjectIdentity(rootPath);
+  if (!(await isIndexedProjectConfirmed(identity.projectId))) {
+    throw new Error('当前仓库尚未完成确认式索引，请先运行 `cw index`。');
+  }
 }
 
 export async function runCleanIndexes(options: {
@@ -196,13 +319,30 @@ export async function runCleanIndexes(options: {
 export async function runIndexCommand(options: {
   rootPath: string;
   force?: boolean;
+  yes?: boolean;
+  isInteractive?: boolean;
+  confirmIndex?: () => Promise<boolean>;
   logLine?: (line: string) => void;
   scanFn?: (rootPath: string, options: ScanOptions) => Promise<ScanStats>;
-  recordIndexedProjectFn?: (rootPath: string) => Promise<void>;
+  recordIndexedProjectFn?: (
+    rootPath: string,
+    options?: { confirmedAt?: string | null },
+  ) => Promise<void>;
   identity?: ProjectIdentity;
 }): Promise<ScanStats> {
   const logLine = options.logLine ?? ((line: string) => logger.info(line));
+  const isInteractive = options.isInteractive ?? Boolean(stdin.isTTY && stdout.isTTY);
   const identity = options.identity ?? getProjectIdentity(options.rootPath);
+
+  const configState = await ensureProjectConfigForIndex(options.rootPath);
+  if (configState.kind === 'created_config') {
+    throw new Error(`已创建 ${configState.configPath}，请先检查配置后重新运行 cw index。`);
+  }
+
+  const preview = await buildIndexPreview(options.rootPath);
+  if (preview.totalFiles === 0) {
+    throw new Error('Current config matches no indexable files.');
+  }
 
   logLine(`开始扫描: ${options.rootPath}`);
   logLine(`项目 ID: ${identity.projectId}`);
@@ -212,15 +352,36 @@ export async function runIndexCommand(options: {
   for (const line of await buildIndexScopeLogLines(options.rootPath)) {
     logLine(line);
   }
+  logLine(`实际匹配预览: ${preview.totalFiles} 个文件`);
+  for (const line of preview.directorySummaries) {
+    logLine(`- ${line}`);
+  }
+  logLine('匹配路径样本:');
+  for (const samplePath of preview.samplePaths) {
+    logLine(`- ${samplePath}`);
+  }
+
+  if (!options.yes) {
+    if (!isInteractive) {
+      throw new Error('Non-interactive index preview requires --yes');
+    }
+
+    const confirmed = await (options.confirmIndex ?? defaultConfirmIndex)();
+    if (!confirmed) {
+      throw new Error('Index confirmation declined');
+    }
+  }
 
   const { withLock } = await import('./utils/lock.js');
   let lastLoggedPercent = 0;
+  const confirmedAt = new Date().toISOString();
   const stats = await withLock(
     identity.projectId,
     'index',
     async () =>
       (options.scanFn ?? scan)(options.rootPath, {
         force: options.force,
+        precomputedFilePaths: preview.matchedFilePaths,
         onProgress: (current, total, message) => {
           if (total === undefined) {
             return;
@@ -234,6 +395,6 @@ export async function runIndexCommand(options: {
       }),
     10 * 60 * 1000,
   );
-  await (options.recordIndexedProjectFn ?? recordIndexedProject)(options.rootPath);
+  await (options.recordIndexedProjectFn ?? recordIndexedProject)(options.rootPath, { confirmedAt });
   return stats;
 }

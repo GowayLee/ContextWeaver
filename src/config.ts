@@ -301,148 +301,15 @@ export function getEnhancerConfig(): EnhancerConfig {
  * 3. 智能保留测试逻辑，但剔除测试数据
  */
 const DEFAULT_EXCLUDE_PATTERNS = [
-  // --- 1. 依赖与环境 (绝对黑名单) ---
   'node_modules',
-  'bower_components',
-  '.venv',
-  'venv', // Python 虚拟环境
-  '.env.*', // 环境变量文件 (.env.local, .env.production 等)
-
-  // --- 2. 锁文件 (Token 杀手，且语义密度极低) ---
-  'package-lock.json',
-  'yarn.lock',
-  'pnpm-lock.yaml',
-  'bun.lockb',
-  'poetry.lock',
-  'Gemfile.lock',
-  'composer.lock',
-  'Cargo.lock',
-
-  // --- 3. 版本控制与 IDE ---
   '.git',
   '.svn',
   '.hg',
   '.idea',
   '.vscode',
   '.vs',
-
-  // --- 4. 构建产物与缓存 ---
-  // 通用构建输出
-  'dist',
-  'build',
-  'out',
-  'target',
-  // 编译产物
-  '*.pyc',
-  '*.pyo',
-  '*.pyd',
-  '*.so',
-  '*.dll',
-  '*.exe',
-  '*.bin',
-  '*.wasm',
-  // 现代前端框架产物
-  '.next',
-  '.nuxt',
-  '.output',
-  '.svelte-kit',
-  // Bundler 缓存
-  '.turbo',
-  '.parcel-cache',
-  '.webpack',
-  '.esbuild',
-  '.rollup.cache',
-  // 测试覆盖率
-  'coverage',
-  '.nyc_output',
-  // Python 缓存
-  '__pycache__',
-  '.pytest_cache',
-  '.mypy_cache',
-  '.tox',
-  '.eggs',
-  '*.egg-info',
-
-  // --- 5. 纯噪音文件 (无文本语义) ---
-  // 压缩文件与 SourceMap
-  '*.min.js',
-  '*.min.css',
-  '*.map',
-  // 图片与多媒体
-  '*.svg',
-  '*.png',
-  '*.jpg',
-  '*.jpeg',
-  '*.gif',
-  '*.ico',
-  '*.webp',
-  '*.bmp',
-  '*.pdf',
-  '*.mp3',
-  '*.mp4',
-  '*.wav',
-  '*.webm',
-  '*.ogg',
-  '*.flac',
-  // 字体文件
-  '*.woff',
-  '*.woff2',
-  '*.ttf',
-  '*.eot',
-  '*.otf',
-  // 压缩包
-  '*.zip',
-  '*.tar',
-  '*.gz',
-  '*.rar',
-  '*.7z',
-  // 系统垃圾
-  '.DS_Store',
-  'Thumbs.db',
-
-  // --- 6. 测试噪音 (保留 *.test.ts，但剔除这些) ---
-  // Jest 快照
-  '__snapshots__',
-  '*.snap',
-  // 测试夹具与数据
-  'test/fixtures',
-  'tests/fixtures',
-  '__fixtures__',
-  'test/data',
-  'tests/data',
-  'testdata',
-  'test-data',
-  'testutils',
-  // Mock 数据
-  'mock',
-  'mocks',
-  '__mocks__',
-  'stub',
-  'stubs',
-
-  // --- 7. 第三方与生成文件 ---
-  // 第三方依赖目录
-  'vendor',
-  'vendors',
-  'third_party',
-  'thirdparty',
-  '3rdparty',
-  'external',
-  'externals',
-  // 生成文件
-  'generated',
-  'gen',
-  'auto-generated',
-  '*.generated.ts',
-  '*.generated.js',
-  '*.pb.go',
-  '*.pb.ts', // protobuf 生成
-
-  // --- 8. 日志与临时文件 ---
-  '*.log',
-  '.cache',
-  '.tmp',
-  'tmp',
+  '.venv',
+  'venv',
 ];
 
 /**

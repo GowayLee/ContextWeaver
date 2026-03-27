@@ -93,13 +93,19 @@ RERANK_TOP_N=20
 cli
   .command('index [path]', '扫描代码库并建立索引')
   .option('-f, --force', '强制重新索引')
-  .action(async (targetPath: string | undefined, options: { force?: boolean }) => {
+  .option('-y, --yes', '跳过确认预览，直接开始索引')
+  .action(async (targetPath: string | undefined, options: { force?: boolean; yes?: boolean }) => {
     const rootPath = targetPath ? path.resolve(targetPath) : process.cwd();
 
     const startTime = Date.now();
 
     try {
-      const stats = await runIndexCommand({ rootPath, force: options.force });
+      const stats = await runIndexCommand({
+        rootPath,
+        force: options.force,
+        yes: options.yes,
+        isInteractive: Boolean(process.stdin.isTTY && process.stdout.isTTY),
+      });
 
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
       logger.info(`索引完成 (${duration}s)`);
@@ -254,6 +260,10 @@ cli
         .split(',')
         .map((t) => t.trim())
         .filter(Boolean);
+
+      await import('./cli.js').then(({ ensureSearchableProject }) =>
+        ensureSearchableProject(repoPath),
+      );
 
       const { handleCodebaseRetrieval } = await import('./mcp/tools/codebaseRetrieval.js');
 

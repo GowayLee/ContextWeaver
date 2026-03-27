@@ -8,6 +8,7 @@ export interface IndexedProjectRecord {
   projectPath: string;
   pathBirthtimeMs: number;
   lastIndexedAt: string;
+  confirmedAt: string | null;
 }
 
 interface RegistryFile {
@@ -26,6 +27,7 @@ function getRegistryPath(): string {
 function normalizeRecord(record: IndexedProjectRecord): IndexedProjectRecord {
   return {
     ...record,
+    confirmedAt: record.confirmedAt ?? null,
     projectPath: path.resolve(record.projectPath),
   };
 }
@@ -48,12 +50,20 @@ function validateRecord(value: unknown, registryPath: string): IndexedProjectRec
   if (typeof record.lastIndexedAt !== 'string') {
     throw new Error(`Invalid ${registryPath}: lastIndexedAt must be a string`);
   }
+  if (
+    record.confirmedAt !== undefined &&
+    record.confirmedAt !== null &&
+    typeof record.confirmedAt !== 'string'
+  ) {
+    throw new Error(`Invalid ${registryPath}: confirmedAt must be a string or null`);
+  }
 
   return normalizeRecord({
     projectId: record.projectId,
     projectPath: record.projectPath,
     pathBirthtimeMs: record.pathBirthtimeMs,
     lastIndexedAt: record.lastIndexedAt,
+    confirmedAt: (record.confirmedAt as string | null | undefined) ?? null,
   });
 }
 
@@ -119,6 +129,22 @@ export async function upsertIndexedProject(record: IndexedProjectRecord): Promis
   const indexes = registry.indexes.filter((item) => item.projectId !== normalized.projectId);
   indexes.push(normalized);
   await writeRegistry(indexes);
+}
+
+export async function markIndexedProjectConfirmed(
+  projectId: string,
+  confirmedAt: string,
+): Promise<void> {
+  const registry = await readRegistry();
+  const indexes = registry.indexes.map((item) =>
+    item.projectId === projectId ? { ...item, confirmedAt } : item,
+  );
+  await writeRegistry(indexes);
+}
+
+export async function isIndexedProjectConfirmed(projectId: string): Promise<boolean> {
+  const registry = await readRegistry();
+  return registry.indexes.some((item) => item.projectId === projectId && item.confirmedAt !== null);
 }
 
 export async function findStaleIndexedProjects(): Promise<IndexedProjectRecord[]> {

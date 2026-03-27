@@ -4,7 +4,9 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   findStaleIndexedProjects,
+  isIndexedProjectConfirmed,
   listIndexedProjects,
+  markIndexedProjectConfirmed,
   removeIndexedProjects,
   upsertIndexedProject,
 } from '../src/indexRegistry.js';
@@ -63,8 +65,64 @@ describe('indexRegistry', () => {
         projectPath: path.resolve(repoRoot),
         pathBirthtimeMs: 1,
         lastIndexedAt: '2026-03-27T00:00:01.000Z',
+        confirmedAt: null,
       },
     ]);
+  });
+
+  it('stores and updates confirmedAt for an indexed project', async () => {
+    const repoRoot = await createTempDir('cw-repo-');
+
+    await upsertIndexedProject({
+      projectId: 'abc123def0',
+      projectPath: repoRoot,
+      pathBirthtimeMs: 1,
+      lastIndexedAt: '2026-03-27T00:00:00.000Z',
+      confirmedAt: null,
+    });
+
+    await markIndexedProjectConfirmed('abc123def0', '2026-03-27T00:00:01.000Z');
+    const projects = await listIndexedProjects();
+    expect(projects[0]?.confirmedAt).toBe('2026-03-27T00:00:01.000Z');
+  });
+
+  it('reports whether a project has completed a confirmed indexing run', async () => {
+    await expect(isIndexedProjectConfirmed('abc123def0')).resolves.toBe(false);
+  });
+
+  it('treats old registry entries without confirmedAt as unconfirmed', async () => {
+    const repoRoot = await createTempDir('cw-repo-');
+    await fs.mkdir(path.dirname(registryPath), { recursive: true });
+    await fs.writeFile(
+      registryPath,
+      `${JSON.stringify(
+        {
+          version: 1,
+          indexes: [
+            {
+              projectId: 'abc123def0',
+              projectPath: repoRoot,
+              pathBirthtimeMs: 1,
+              lastIndexedAt: '2026-03-27T00:00:00.000Z',
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      'utf-8',
+    );
+
+    await expect(listIndexedProjects()).resolves.toEqual([
+      {
+        projectId: 'abc123def0',
+        projectPath: path.resolve(repoRoot),
+        pathBirthtimeMs: 1,
+        lastIndexedAt: '2026-03-27T00:00:00.000Z',
+        confirmedAt: null,
+      },
+    ]);
+    await expect(isIndexedProjectConfirmed('abc123def0')).resolves.toBe(false);
   });
 
   it('detects stale projects when the stored path is missing', async () => {
@@ -83,6 +141,7 @@ describe('indexRegistry', () => {
         projectPath: path.resolve(missingPath),
         pathBirthtimeMs: 1,
         lastIndexedAt: '2026-03-27T00:00:00.000Z',
+        confirmedAt: null,
       },
     ]);
   });

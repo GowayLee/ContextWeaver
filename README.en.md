@@ -53,7 +53,7 @@
 
 - **MCP Server Mode**: One-click launch of Model Context Protocol server
 - **Zen Design**: Intent-term separation, LLM-friendly API design
-- **Auto-Indexing**: First query triggers indexing automatically, incremental updates are transparent
+- **Confirmed Indexing**: The first index run must show a real preview and get explicit approval
 
 ### ✏️ Prompt Enhancer
 
@@ -136,6 +136,8 @@ contextweaver init-project --force
 }
 ```
 
+The default template now writes `includePatterns: ["src/**"]` explicitly as a safer starting point. Expand it manually if your repository needs a wider scope.
+
 - `includePatterns` narrows the candidate set first; omit it to allow the whole repository
 - `includePatterns: []` means an empty indexing scope
 - `ignorePatterns` subtracts from that candidate set
@@ -148,7 +150,7 @@ contextweaver init-project --force
 
 - The old `IGNORE_PATTERNS` environment variable has been removed with no backward-compatibility layer
 - If you previously kept indexing filters in shell config, CI, or a user-level `.env`, move them into the repository-root `cwconfig.json`
-- If a repository has no `cwconfig.json`, behavior stays close to the previous default: scan the whole repo, then apply built-in excludes and the repository-root `.gitignore`
+- If a repository has no `cwconfig.json`, `cw index` now creates a template and exits so you can review it first
 
 #### Common Examples
 
@@ -182,7 +184,12 @@ contextweaver index /path/to/your/project
 contextweaver index --force
 ```
 
-Before scanning starts, the CLI now prints a scope summary showing `includePatterns`, `ignorePatterns`, repository-root `.gitignore`, built-in excludes, and the fact that the root `cwconfig.json` itself is always excluded.
+`cw index` now follows a confirmation-based workflow:
+
+- If `cwconfig.json` is missing, it creates a template and exits immediately
+- Before indexing, it prints a scope summary including the concrete built-in ignore list, then shows the "actual match preview" with directory/extension summaries and real path samples
+- Indexing starts only after confirmation; non-interactive runs must pass `--yes`
+- `--yes` still counts as explicit confirmation, which unlocks later silent incremental repair for `search` and MCP
 
 ### Clean Stale Indexes
 
@@ -208,6 +215,8 @@ cw search --information-request "How is user authentication implemented?"
 # With exact terms
 cw search --information-request "Database connection logic" --technical-terms "DatabasePool,Connection"
 ```
+
+Local `search` now requires the repository to have completed at least one confirmed `cw index` run. If not, it fails fast and tells you to run `cw index` first.
 
 ### Prompt Enhancement
 
@@ -270,6 +279,7 @@ ContextWeaver provides two MCP tools:
 - **Intent-Term Separation**: `information_request` describes "what to do", `technical_terms` filters "what it's called"
 - **Golden Defaults**: Provides same-file context, no cross-file crawling by default
 - **Agent Autonomy**: The tool only locates; cross-file exploration is driven by the Agent
+- **No first-use auto-indexing**: A repository must complete one confirmed `cw index` run before MCP can do silent incremental repair
 
 #### `enhance-prompt` Parameters
 
@@ -428,6 +438,8 @@ contextweaver/
 Filtering order inside `cwconfig.json` is: built-in default excludes -> `includePatterns` -> `ignorePatterns` -> `.gitignore` -> extension allowlist.
 
 ## 🌍 Language Support
+
+By default, ContextWeaver now only indexes file types that can reliably produce retrievable chunks: `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.py`, `.go`, `.rs`, `.java`, `.c`, `.h`, `.cpp`, `.cc`, `.cxx`, `.hpp`, `.md`, `.json`.
 
 ContextWeaver natively supports AST parsing for the following languages via Tree-sitter:
 

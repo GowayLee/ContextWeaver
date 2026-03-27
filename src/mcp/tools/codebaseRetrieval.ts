@@ -12,7 +12,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { z } from 'zod';
-import { generateProjectId } from '../../db/index.js';
+import { recordIndexedProject } from '../../cli.js';
+import { getProjectIdentity } from '../../db/index.js';
+import { isIndexedProjectConfirmed, listIndexedProjects } from '../../indexRegistry.js';
 // 注意：SearchService 和 scan 改为延迟导入，避免在 MCP 启动时就加载 native 模块
 import type { ContextPack, Segment } from '../../search/types.js';
 import { logger } from '../../utils/logger.js';
@@ -115,34 +117,58 @@ function isProjectIndexed(projectId: string): boolean {
  * @param projectId 项目 ID
  * @param onProgress 可选的进度回调
  */
-async function ensureIndexed(
+export async function ensureIndexed(
   repoPath: string,
   projectId: string,
   onProgress?: (current: number, total?: number, message?: string) => void,
+  dependencies?: {
+    withLock?: <T>(
+      projectId: string,
+      operation: string,
+      callback: () => Promise<T>,
+      timeoutMs?: number,
+    ) => Promise<T>;
+    scanFn?: typeof import('../../scanner/index.js').scan;
+    isConfirmedFn?: (projectId: string) => Promise<boolean>;
+    listIndexedProjectsFn?: typeof listIndexedProjects;
+    recordIndexedProjectFn?: typeof recordIndexedProject;
+    isProjectIndexedFn?: (projectId: string) => boolean;
+  },
 ): Promise<void> {
+  if (!(await (dependencies?.isConfirmedFn ?? isIndexedProjectConfirmed)(projectId))) {
+    throw new Error('当前仓库尚未完成确认式索引，请先运行 `cw index`。');
+  }
+
   // 延迟导入锁和 scan 函数（避免 MCP 启动时加载 native 模块）
-  const { withLock } = await import('../../utils/lock.js');
-  const { scan } = await import('../../scanner/index.js');
+  const withLock = dependencies?.withLock ?? (await import('../../utils/lock.js')).withLock;
+  const scanFn = dependencies?.scanFn ?? (await import('../../scanner/index.js')).scan;
+  const listProjects = dependencies?.listIndexedProjectsFn ?? listIndexedProjects;
+  const recordProject = dependencies?.recordIndexedProjectFn ?? recordIndexedProject;
+  const isIndexed = dependencies?.isProjectIndexedFn ?? isProjectIndexed;
 
   await withLock(
     projectId,
     'index',
     async () => {
-      const wasIndexed = isProjectIndexed(projectId);
+      const wasIndexed = isIndexed(projectId);
 
       if (!wasIndexed) {
         logger.info(
           { repoPath, projectId: projectId.slice(0, 10) },
-          '代码库未初始化，开始首次索引...',
+          '代码库索引缺失，开始静默修补...',
         );
-        onProgress?.(0, 100, '代码库未索引，开始首次索引...');
+        onProgress?.(0, 100, '代码库索引缺失，开始静默修补...');
       } else {
         logger.debug({ projectId: projectId.slice(0, 10) }, '执行增量索引...');
       }
 
       const startTime = Date.now();
-      const stats = await scan(repoPath, { vectorIndex: true, onProgress });
+      const stats = await scanFn(repoPath, { vectorIndex: true, onProgress });
       const elapsed = Date.now() - startTime;
+      const existingRecord = (await listProjects()).find((item) => item.projectId === projectId);
+      await recordProject(repoPath, {
+        confirmedAt: existingRecord?.confirmedAt ?? null,
+      });
 
       logger.info(
         {
@@ -202,7 +228,7 @@ export async function handleCodebaseRetrieval(
   }
 
   // 1. 生成项目 ID（与 CLI 保持一致：路径 + 目录创建时间）
-  const projectId = generateProjectId(repo_path);
+  const projectId = getProjectIdentity(repo_path).projectId;
 
   // 2. 确保代码库已索引（自动初始化 + 增量更新）
   await ensureIndexed(repo_path, projectId, onProgress);

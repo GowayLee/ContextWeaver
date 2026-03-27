@@ -26,6 +26,15 @@ export function getDefaultProjectConfig(): ProjectConfig {
   };
 }
 
+export function getRecommendedProjectConfigTemplate(): ProjectConfig {
+  return {
+    indexing: {
+      includePatterns: ['src/**'],
+      ignorePatterns: [],
+    },
+  };
+}
+
 export function stringifyProjectConfig(config: ProjectConfig): string {
   return `${JSON.stringify(
     {
