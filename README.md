@@ -119,6 +119,14 @@ RERANK_TOP_N=20
 
 项目级索引范围通过仓库根目录的 `cwconfig.json` 控制，不再使用 `IGNORE_PATTERNS` 环境变量。
 
+```bash
+# 在当前目录快速生成 cwconfig.json 模板
+contextweaver init-project
+
+# 已存在时强制覆盖
+contextweaver init-project --force
+```
+
 ```json
 {
   "indexing": {
@@ -173,6 +181,23 @@ contextweaver index /path/to/your/project
 # 强制重新索引
 contextweaver index --force
 ```
+
+开始索引前，CLI 会先打印当前仓库的索引范围摘要，包括 `includePatterns`、`ignorePatterns`、项目根 `.gitignore`、内置排除规则，以及 `cwconfig.json` 始终不会被索引这一点。
+
+### 清理失效索引
+
+```bash
+# 交互式扫描 ~/.contextweaver 并清理失效索引
+contextweaver clean
+
+# 只查看待清理项
+contextweaver clean --dry-run
+
+# 跳过确认直接清理
+contextweaver clean --yes
+```
+
+`clean` 会根据记录的项目路径和目录身份信息，筛选出本地已经不存在或已变更为其他仓库的索引目录，并在删除前统一确认一次。
 
 ### 本地搜索
 

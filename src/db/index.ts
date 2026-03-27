@@ -26,6 +26,12 @@ export interface FileMeta {
   vectorIndexHash: string | null;
 }
 
+export interface ProjectIdentity {
+  projectPath: string;
+  pathBirthtimeMs: number;
+  projectId: string;
+}
+
 /**
  * 获取目录的创建时间（birthtime）
  * 优先使用 .git 目录的创建时间，否则使用根目录的创建时间
@@ -64,9 +70,18 @@ function getDirectoryBirthtime(projectPath: string): number {
  * @returns 项目 ID (MD5 hash)
  */
 export function generateProjectId(projectPath: string): string {
-  const birthtime = getDirectoryBirthtime(projectPath);
-  const uniqueKey = `${projectPath}::${birthtime}`;
-  return crypto.createHash('md5').update(uniqueKey).digest('hex').slice(0, 10);
+  return getProjectIdentity(projectPath).projectId;
+}
+
+export function getProjectIdentity(projectPath: string): ProjectIdentity {
+  const pathBirthtimeMs = getDirectoryBirthtime(projectPath);
+  const uniqueKey = `${projectPath}::${pathBirthtimeMs}`;
+
+  return {
+    projectPath,
+    pathBirthtimeMs,
+    projectId: crypto.createHash('md5').update(uniqueKey).digest('hex').slice(0, 10),
+  };
 }
 
 /**
@@ -265,7 +280,9 @@ export function batchUpdateMtime(
  * 获取所有已索引的文件路径
  */
 export function getAllPaths(db: Database.Database): string[] {
-  const rows = db.prepare('SELECT path FROM files').all() as Array<{ path: string }>;
+  const rows = db.prepare('SELECT path FROM files').all() as Array<{
+    path: string;
+  }>;
   return rows.map((r) => r.path);
 }
 
@@ -316,11 +333,13 @@ function getMetadata(db: Database.Database, key: string): string | null {
  * 设置 metadata 值
  */
 function setMetadata(db: Database.Database, key: string, value: string): void {
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO metadata (key, value)
     VALUES (?, ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value
-  `).run(key, value);
+  `,
+  ).run(key, value);
 }
 
 /**

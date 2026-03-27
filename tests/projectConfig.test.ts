@@ -2,7 +2,13 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { loadProjectConfig } from '../src/projectConfig.js';
+import { getProjectIdentity } from '../src/db/index.js';
+import {
+  formatProjectIndexingScope,
+  getDefaultProjectConfig,
+  loadProjectConfig,
+  stringifyProjectConfig,
+} from '../src/projectConfig.js';
 
 async function createTempRepo(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), 'cw-project-config-'));
@@ -133,5 +139,56 @@ describe('loadProjectConfig', () => {
     await writeConfig(repoRoot, JSON.stringify({ indexing: { ignorePatterns: ['!dist/**'] } }));
 
     await expect(loadProjectConfig(repoRoot)).rejects.toThrow('ignorePatterns');
+  });
+});
+
+describe('project config helpers', () => {
+  it('returns the canonical default project config', () => {
+    expect(getDefaultProjectConfig()).toEqual({
+      indexing: {
+        includePatterns: null,
+        ignorePatterns: [],
+      },
+    });
+  });
+
+  it('stringifies the default project config without includePatterns', () => {
+    expect(stringifyProjectConfig(getDefaultProjectConfig())).toBe(
+      '{\n  "indexing": {\n    "ignorePatterns": []\n  }\n}\n',
+    );
+  });
+
+  it('formats scope summaries for default and empty include scopes', () => {
+    expect(formatProjectIndexingScope(getDefaultProjectConfig())).toEqual({
+      includeSummary: '<all files>',
+      ignoreSummary: '<none>',
+      hasEmptyIncludeScope: false,
+    });
+
+    expect(
+      formatProjectIndexingScope({
+        indexing: {
+          includePatterns: [],
+          ignorePatterns: ['dist/**'],
+        },
+      }),
+    ).toEqual({
+      includeSummary: '<empty>',
+      ignoreSummary: 'dist/**',
+      hasEmptyIncludeScope: true,
+    });
+  });
+});
+
+describe('getProjectIdentity', () => {
+  it('returns project path, birthtime, and derived project id', async () => {
+    const repoRoot = await createTempRepo();
+    tempDirs.push(repoRoot);
+
+    const identity = getProjectIdentity(repoRoot);
+
+    expect(identity.projectPath).toBe(repoRoot);
+    expect(identity.pathBirthtimeMs).toBeGreaterThanOrEqual(0);
+    expect(identity.projectId).toMatch(/^[a-f0-9]{10}$/);
   });
 });

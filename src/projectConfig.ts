@@ -17,6 +17,49 @@ const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
   },
 };
 
+export function getDefaultProjectConfig(): ProjectConfig {
+  return {
+    indexing: {
+      includePatterns: DEFAULT_PROJECT_CONFIG.indexing.includePatterns,
+      ignorePatterns: [...DEFAULT_PROJECT_CONFIG.indexing.ignorePatterns],
+    },
+  };
+}
+
+export function stringifyProjectConfig(config: ProjectConfig): string {
+  return `${JSON.stringify(
+    {
+      indexing: {
+        ...(config.indexing.includePatterns === null
+          ? {}
+          : { includePatterns: config.indexing.includePatterns }),
+        ignorePatterns: config.indexing.ignorePatterns,
+      },
+    },
+    null,
+    2,
+  )}
+`;
+}
+
+export function formatProjectIndexingScope(config: ProjectConfig): {
+  includeSummary: string;
+  ignoreSummary: string;
+  hasEmptyIncludeScope: boolean;
+} {
+  const include = config.indexing.includePatterns;
+
+  return {
+    includeSummary:
+      include === null ? '<all files>' : include.length === 0 ? '<empty>' : include.join(', '),
+    ignoreSummary:
+      config.indexing.ignorePatterns.length === 0
+        ? '<none>'
+        : config.indexing.ignorePatterns.join(', '),
+    hasEmptyIncludeScope: Array.isArray(include) && include.length === 0,
+  };
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -54,7 +97,7 @@ export async function loadProjectConfig(rootPath: string): Promise<ProjectConfig
   } catch (error) {
     const err = error as NodeJS.ErrnoException;
     if (err.code === 'ENOENT') {
-      return DEFAULT_PROJECT_CONFIG;
+      return getDefaultProjectConfig();
     }
     throw error;
   }
@@ -73,7 +116,7 @@ export async function loadProjectConfig(rootPath: string): Promise<ProjectConfig
 
   const indexingValue = parsed.indexing;
   if (indexingValue === undefined) {
-    return DEFAULT_PROJECT_CONFIG;
+    return getDefaultProjectConfig();
   }
 
   if (!isPlainObject(indexingValue)) {

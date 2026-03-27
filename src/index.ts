@@ -7,8 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import cac from 'cac';
-import { generateProjectId } from './db/index.js';
-import { type ScanStats, scan } from './scanner/index.js';
+import { initProjectConfigCommand, runCleanIndexes, runIndexCommand } from './cli.js';
 import { logger } from './utils/logger.js';
 
 // 读取 package.json 获取版本号
@@ -96,41 +95,11 @@ cli
   .option('-f, --force', '强制重新索引')
   .action(async (targetPath: string | undefined, options: { force?: boolean }) => {
     const rootPath = targetPath ? path.resolve(targetPath) : process.cwd();
-    const projectId = generateProjectId(rootPath);
-
-    logger.info(`开始扫描: ${rootPath}`);
-    logger.info(`项目 ID: ${projectId}`);
-    if (options.force) {
-      logger.info('强制重新索引: 是');
-    }
 
     const startTime = Date.now();
 
     try {
-      const { withLock } = await import('./utils/lock.js');
-
-      // 进度日志节流：只在 30%、60%、90% 时输出（100% 由扫描完成日志代替）
-      let lastLoggedPercent = 0;
-      const stats: ScanStats = await withLock(
-        projectId,
-        'index',
-        async () =>
-          scan(rootPath, {
-            force: options.force,
-            onProgress: (current, total, message) => {
-              if (total !== undefined) {
-                const percent = Math.floor((current / total) * 100);
-                if (percent >= lastLoggedPercent + 30 && percent < 100) {
-                  logger.info(`索引进度: ${percent}% - ${message || ''}`);
-                  lastLoggedPercent = Math.floor(percent / 30) * 30;
-                }
-              }
-            },
-          }),
-        10 * 60 * 1000,
-      );
-
-      process.stdout.write('\n');
+      const stats = await runIndexCommand({ rootPath, force: options.force });
 
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
       logger.info(`索引完成 (${duration}s)`);
@@ -140,6 +109,54 @@ cli
     } catch (err) {
       const error = err as { message?: string; stack?: string };
       logger.error({ err, stack: error.stack }, `索引失败: ${error.message}`);
+      process.exit(1);
+    }
+  });
+
+cli
+  .command('init-project', '初始化当前目录的 cwconfig.json')
+  .option('-f, --force', '覆盖已有 cwconfig.json')
+  .action(async (options: { force?: boolean }) => {
+    try {
+      const configPath = await initProjectConfigCommand({
+        cwd: process.cwd(),
+        force: options.force === true,
+      });
+      logger.info(`创建项目配置文件: ${configPath}`);
+      logger.info('includePatterns 省略时表示按默认规则索引整个项目');
+      logger.info('ignorePatterns 可用于排除项目中的生成目录或低价值路径');
+    } catch (err) {
+      const error = err as { message?: string; stack?: string };
+      logger.error({ err, stack: error.stack }, `初始化项目配置失败: ${error.message}`);
+      process.exit(1);
+    }
+  });
+
+cli
+  .command('clean', '交互式清理失效索引')
+  .option('-y, --yes', '跳过确认，直接删除失效索引')
+  .option('--dry-run', '仅显示待清理索引，不执行删除')
+  .action(async (options: { yes?: boolean; dryRun?: boolean }) => {
+    try {
+      const result = await runCleanIndexes({
+        isInteractive: Boolean(process.stdin.isTTY && process.stdout.isTTY),
+        yes: options.yes,
+        dryRun: options.dryRun,
+        writeLine: (line) => logger.info(line),
+      });
+
+      if (result.deletedProjectIds.length > 0) {
+        logger.info(`已删除 ${result.deletedProjectIds.length} 个失效索引`);
+      }
+      if (result.prunedProjectIds.length > 0) {
+        logger.info(`已清理 ${result.prunedProjectIds.length} 条缺失索引记录`);
+      }
+      if (result.failedProjectIds.length > 0) {
+        throw new Error(`部分索引删除失败: ${result.failedProjectIds.join(', ')}`);
+      }
+    } catch (err) {
+      const error = err as { message?: string; stack?: string };
+      logger.error({ err, stack: error.stack }, `清理失败: ${error.message}`);
       process.exit(1);
     }
   });

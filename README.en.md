@@ -119,6 +119,14 @@ RERANK_TOP_N=20
 
 Project-specific indexing scope now lives in a repository-root `cwconfig.json` file instead of the old `IGNORE_PATTERNS` environment variable.
 
+```bash
+# Create a cwconfig.json template in the current directory
+contextweaver init-project
+
+# Overwrite an existing file
+contextweaver init-project --force
+```
+
 ```json
 {
   "indexing": {
@@ -173,6 +181,23 @@ contextweaver index /path/to/your/project
 # Force re-index
 contextweaver index --force
 ```
+
+Before scanning starts, the CLI now prints a scope summary showing `includePatterns`, `ignorePatterns`, repository-root `.gitignore`, built-in excludes, and the fact that the root `cwconfig.json` itself is always excluded.
+
+### Clean Stale Indexes
+
+```bash
+# Interactively scan ~/.contextweaver and clean stale indexes
+contextweaver clean
+
+# Preview only
+contextweaver clean --dry-run
+
+# Skip confirmation
+contextweaver clean --yes
+```
+
+`clean` uses the recorded project path and directory identity to find index directories whose local repository is gone or has been replaced by a different repository at the same path, then asks once before deletion.
 
 ### Local Search
 

@@ -1,6 +1,6 @@
 {
   "name": "@haurynlee/contextweaver",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Semantic code retrieval engine for AI agents with project-scoped indexing config and Prompt Enhancer",
   "license": "MIT",
   "author": "haurynlee",
