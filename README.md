@@ -14,7 +14,7 @@
 
 ---
 
-> **Fork 说明**：本项目 fork 自 [hsingjui/ContextWeaver](https://github.com/hsingjui/ContextWeaver)，新增了 **Prompt Enhancer（提示词增强）** 功能，支持 OpenAI / Claude / Gemini 多 LLM 端点、CLI 命令行、Web UI 交互三种使用方式。
+> **Fork 说明**：本项目 fork 自 [hsingjui/ContextWeaver](https://github.com/hsingjui/ContextWeaver)，当前维护仓库为 [GowayLee/ContextWeaver](https://github.com/GowayLee/ContextWeaver)，新增了 **Prompt Enhancer（提示词增强）** 功能，支持 OpenAI / Claude / Gemini 多 LLM 端点、CLI 命令行、Web UI 交互三种使用方式。
 
 **ContextWeaver** 是一个专为 AI 代码助手设计的语义检索引擎，采用混合搜索（向量 + 词法）、智能上下文扩展和 Token 感知打包策略，为 LLM 提供精准、相关且上下文完整的代码片段。
 
@@ -73,10 +73,10 @@
 
 ```bash
 # 全局安装（带 Prompt Enhancer 的增强版）
-npm install -g @lyy0709/contextweaver
+npm install -g @haurynlee/contextweaver
 
 # 或使用 pnpm
-pnpm add -g @lyy0709/contextweaver
+pnpm add -g @haurynlee/contextweaver
 ```
 
 ### 初始化配置
@@ -126,8 +126,37 @@ RERANK_TOP_N=20
 ```
 
 - `includePatterns` 先缩小候选范围；省略时默认整个仓库可参与索引
+- `includePatterns` 传空数组时表示索引范围为空
 - `ignorePatterns` 再从候选范围中剔除路径
-- 内置默认排除规则和项目根 `.gitignore` 仍然会继续生效
+- 过滤顺序固定为：内置默认排除 → `includePatterns` → `ignorePatterns` → 项目根 `.gitignore` → 扩展名白名单
+- 内置默认排除规则和项目根 `.gitignore` 仍然会继续生效，`includePatterns` 不能把它们重新纳入索引
+- 仓库根的 `cwconfig.json` 本身不会被索引，但子目录里的同名文件不会被特殊处理
+- 不支持 `!` negation 模式；配置文件存在语法或字段错误时，索引会直接失败而不是静默回退
+
+#### 迁移说明
+
+- 旧的 `IGNORE_PATTERNS` 环境变量已经移除，不再兼容
+- 之前写在 shell、CI 或用户级 `.env` 中的索引过滤规则，应迁移到仓库根 `cwconfig.json`
+- 如果你的仓库没有 `cwconfig.json`，行为仍然与此前接近：默认扫描整个仓库，再叠加内置排除和项目根 `.gitignore`
+
+#### 常见示例
+
+```json
+{
+  "indexing": {
+    "includePatterns": ["src/**", "packages/*/src/**", "apps/*/src/**"],
+    "ignorePatterns": [
+      "**/generated/**",
+      "**/__snapshots__/**",
+      "**/fixtures/**"
+    ]
+  }
+}
+```
+
+- 单仓库项目：只索引 `src/**`
+- Monorepo：组合 `packages/*/src/**`、`apps/*/src/**`
+- 生成代码、快照、夹具等高噪音目录，建议放进 `ignorePatterns`
 
 ### 索引代码库
 
@@ -490,6 +519,9 @@ LOG_LEVEL=debug contextweaver search --information-request "..."
 ## 📄 开源协议
 
 本项目采用 MIT 许可证。
+
+- 仓库当前保留了上游项目的 MIT 许可文本
+- fork 后继续发布时，至少应继续附带现有 `LICENSE` 中的许可声明与版权声明
 
 ## 🙏 致谢
 

@@ -14,7 +14,7 @@
 
 ---
 
-> **Fork Note**: This project is forked from [hsingjui/ContextWeaver](https://github.com/hsingjui/ContextWeaver), with the addition of a **Prompt Enhancer** feature supporting OpenAI / Claude / Gemini multi-LLM endpoints, CLI commands, and Web UI interaction.
+> **Fork Note**: This project is forked from [hsingjui/ContextWeaver](https://github.com/hsingjui/ContextWeaver). The actively maintained fork now lives at [GowayLee/ContextWeaver](https://github.com/GowayLee/ContextWeaver), with the addition of a **Prompt Enhancer** feature supporting OpenAI / Claude / Gemini multi-LLM endpoints, CLI commands, and Web UI interaction.
 
 **ContextWeaver** is a semantic retrieval engine designed for AI coding assistants. It uses hybrid search (vector + lexical), intelligent context expansion, and token-aware packing to provide precise, relevant, and context-complete code snippets for LLMs.
 
@@ -73,10 +73,10 @@
 
 ```bash
 # Global install (enhanced version with Prompt Enhancer)
-npm install -g @lyy0709/contextweaver
+npm install -g @haurynlee/contextweaver
 
 # Or using pnpm
-pnpm add -g @lyy0709/contextweaver
+pnpm add -g @haurynlee/contextweaver
 ```
 
 ### Initialize Configuration
@@ -126,8 +126,37 @@ Project-specific indexing scope now lives in a repository-root `cwconfig.json` f
 ```
 
 - `includePatterns` narrows the candidate set first; omit it to allow the whole repository
+- `includePatterns: []` means an empty indexing scope
 - `ignorePatterns` subtracts from that candidate set
-- Built-in default excludes and the repository `.gitignore` still apply
+- Filtering order is fixed: built-in default excludes -> `includePatterns` -> `ignorePatterns` -> repository-root `.gitignore` -> extension allowlist
+- Built-in default excludes and the repository `.gitignore` still apply; `includePatterns` cannot re-include them
+- The repository-root `cwconfig.json` itself is never indexed, but nested files with the same name are treated as normal files
+- `!` negation patterns are not supported; if `cwconfig.json` is invalid, indexing fails immediately instead of silently falling back
+
+#### Migration Notes
+
+- The old `IGNORE_PATTERNS` environment variable has been removed with no backward-compatibility layer
+- If you previously kept indexing filters in shell config, CI, or a user-level `.env`, move them into the repository-root `cwconfig.json`
+- If a repository has no `cwconfig.json`, behavior stays close to the previous default: scan the whole repo, then apply built-in excludes and the repository-root `.gitignore`
+
+#### Common Examples
+
+```json
+{
+  "indexing": {
+    "includePatterns": ["src/**", "packages/*/src/**", "apps/*/src/**"],
+    "ignorePatterns": [
+      "**/generated/**",
+      "**/__snapshots__/**",
+      "**/fixtures/**"
+    ]
+  }
+}
+```
+
+- Single-package repo: index only `src/**`
+- Monorepo: combine `packages/*/src/**` and `apps/*/src/**`
+- Generated code, snapshots, and fixtures are good candidates for `ignorePatterns`
 
 ### Index a Codebase
 
@@ -420,6 +449,9 @@ LOG_LEVEL=debug contextweaver search --information-request "..."
 ## 📄 License
 
 This project is licensed under the MIT License.
+
+- The repository currently keeps the upstream MIT license text
+- If you redistribute this fork, keep the existing `LICENSE` notice and copyright notice with the package
 
 ## 🙏 Acknowledgments
 

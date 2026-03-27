@@ -1,14 +1,17 @@
 {
-  "name": "@lyy0709/contextweaver",
-  "version": "1.0.6",
-  "description": "A context weaving tool for LLMs — with Prompt Enhancer",
+  "name": "@haurynlee/contextweaver",
+  "version": "1.1.0",
+  "description": "Semantic code retrieval engine for AI agents with project-scoped indexing config and Prompt Enhancer",
   "license": "MIT",
-  "author": "lyy0709",
+  "author": "haurynlee",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/lyy0709/ContextWeaver.git"
+    "url": "git+https://github.com/GowayLee/ContextWeaver.git"
   },
-  "homepage": "https://github.com/lyy0709/ContextWeaver#readme",
+  "homepage": "https://github.com/GowayLee/ContextWeaver#readme",
+  "bugs": {
+    "url": "https://github.com/GowayLee/ContextWeaver/issues"
+  },
   "private": false,
   "type": "module",
   "bin": {
@@ -22,6 +25,15 @@
   "engines": {
     "node": ">=20"
   },
+  "keywords": [
+    "ai",
+    "agent",
+    "semantic-search",
+    "code-search",
+    "mcp",
+    "prompt-enhancer",
+    "tree-sitter"
+  ],
   "scripts": {
     "build": "tsup src/index.ts src/mcp/main.ts --format esm --dts --out-dir dist --sourcemap --clean",
     "build:release": "tsup src/index.ts src/mcp/main.ts --format esm --dts --out-dir dist --clean",
