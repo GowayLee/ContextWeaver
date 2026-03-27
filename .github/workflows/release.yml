@@ -87,6 +87,8 @@ jobs:
 
       - name: Publish to NPM
         if: github.event_name != 'workflow_dispatch' || steps.npmcheck.outputs.exists != 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --no-git-checks --access public --provenance
 
       # push tag 和手动重跑都创建/更新 GitHub Release（手动重跑时显式指定 tag_name）
