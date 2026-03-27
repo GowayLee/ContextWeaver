@@ -1,11 +1,10 @@
-# ContextWeaver
-
-<p align="center">
+<div align="center">
+  <h1>ContextWeaver</h1>
   <strong>🧵 A Context Weaving Engine for AI Agents</strong>
-</p>
+</div>
 
 <p align="center">
-  <em>Context Engine for AI Agents — Hybrid Search • Token-Aware Packing • Prompt Context Preparation</em>
+  <em>Hybrid Search • Graph Expansion • Token-Aware Packing • Prompt Context Preparation</em>
 </p>
 
 <p align="center">
@@ -14,7 +13,7 @@
 
 ---
 
-**ContextWeaver** is a context engine for AI coding agents, built around **CLI + Skills**: the CLI provides deterministic local commands for retrieval and prompt-context preparation, while Skills teach the running agent how to consume repository evidence, when to ask one high-value question, and how to turn a vague repo change request into an executable task prompt.
+**ContextWeaver** is a context engine, built around **CLI + Skills**: the CLI provides deterministic local commands for retrieval and prompt-context preparation, while Skills teach the running agent how to consume repository evidence, when to ask one high-value question, and how to turn a vague repo change request into an executable task prompt.
 
 <p align="center">
   <img src="assets/architecture.png" alt="ContextWeaver architecture overview" width="800" />

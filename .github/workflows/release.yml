@@ -30,7 +30,7 @@ jobs:
       - name: Resolve release version
         id: rel
         run: |
-          PKG_NAME="$(node -p \"require('./package.json').name\")"
+          PKG_NAME="$(node -p "require('./package.json').name")"
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             INPUT="${{ github.event.inputs.version }}"
             VER="${INPUT#v}"

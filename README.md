@@ -1,11 +1,10 @@
-# ContextWeaver
-
-<p align="center">
+<div align="center">
+  <h1>ContextWeaver</h1>
   <strong>🧵 为 AI Agent 精心编织的代码库上下文引擎</strong>
-</p>
+</div>
 
 <p align="center">
-  <em>Context Engine for AI Agents — Hybrid Search • Token-Aware Packing • Prompt Context Preparation</em>
+  <em>Hybrid Search • Graph Expansion • Token-Aware Packing • Prompt Context Preparation</em>
 </p>
 
 <p align="center">
@@ -14,10 +13,10 @@
 
 ---
 
-**ContextWeaver** 是一个专为 AI 代码助手设计的上下文引擎，由 **CLI + Skill** 组成：CLI 提供稳定的本地检索与证据准备命令，Skill 指导运行中的 agent 如何消费这些结果、如何在必要时向用户提问、以及如何把模糊请求收敛成可执行任务。
+**ContextWeaver** 是一个上下文引擎，由 **CLI + Skill** 组成：CLI 提供稳定的本地检索与证据准备命令，Skill 指导运行中的 agent 如何消费这些结果、如何在必要时向用户提问、以及如何把模糊请求收敛成可执行任务。
 
 <p align="center">
-  <img src="assets/architecture.png" alt="ContextWeaver 架构概览" width="800" />
+  <img src="assets/architecture.png" alt="Overview" width="800" />
 </p>
 
 ## 核心特性
