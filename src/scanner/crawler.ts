@@ -1,5 +1,5 @@
 import { fdir } from 'fdir';
-import { isAllowedFile, isFiltered } from './filter.js';
+import { isAllowedFile, isFiltered, isIncluded } from './filter.js';
 
 /**
  * 转义正则表达式特殊字符
@@ -23,7 +23,7 @@ export async function crawl(rootPath: string): Promise<string[]> {
         new RegExp(`^${escapeRegExp(normalizedRootPath)}/?`),
         '',
       );
-      return !isFiltered(relativePath) && isAllowedFile(filePath);
+      return isIncluded(relativePath) && !isFiltered(relativePath) && isAllowedFile(filePath);
     });
 
   const paths = await api.crawl(rootPath).withPromise();

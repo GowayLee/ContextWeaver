@@ -69,9 +69,6 @@ RERANK_BASE_URL=https://api.siliconflow.cn/v1/rerank
 RERANK_MODEL=BAAI/bge-reranker-v2-m3
 RERANK_TOP_N=20
 
-# 索引忽略模式（可选，逗号分隔，默认已包含常见忽略项）
-# IGNORE_PATTERNS=.venv,node_modules
-
 # Prompt Enhancer 配置（可选，使用 enhance 命令时需要）
 # PROMPT_ENHANCER_ENDPOINT=openai
 # PROMPT_ENHANCER_BASE_URL=
@@ -243,13 +240,11 @@ cli
 
       const { handleCodebaseRetrieval } = await import('./mcp/tools/codebaseRetrieval.js');
 
-      const response = await handleCodebaseRetrieval(
-        {
-          repo_path: repoPath,
-          information_request: informationRequest,
-          technical_terms: technicalTerms.length > 0 ? technicalTerms : undefined,
-        },
-      );
+      const response = await handleCodebaseRetrieval({
+        repo_path: repoPath,
+        information_request: informationRequest,
+        technical_terms: technicalTerms.length > 0 ? technicalTerms : undefined,
+      });
 
       const text = response.content.map((item) => item.text).join('\n');
       process.stdout.write(`${text}\n`);

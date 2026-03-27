@@ -450,19 +450,7 @@ const DEFAULT_EXCLUDE_PATTERNS = [
  * @returns 排除模式数组
  */
 export function getExcludePatterns(): string[] {
-  const envPatterns = process.env.IGNORE_PATTERNS;
-  const patterns = [...DEFAULT_EXCLUDE_PATTERNS];
-
-  if (envPatterns) {
-    // 解析逗号分隔的环境变量
-    const additional = envPatterns
-      .split(',')
-      .map((p) => p.trim())
-      .filter(Boolean);
-    patterns.push(...additional);
-  }
-
-  return patterns;
+  return [...DEFAULT_EXCLUDE_PATTERNS];
 }
 
 export { isDev };

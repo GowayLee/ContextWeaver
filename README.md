@@ -25,32 +25,38 @@
 ## ✨ 核心特性
 
 ### 🔍 混合检索引擎
+
 - **向量召回 (Vector Retrieval)**：基于语义相似度的深度理解
 - **词法召回 (Lexical/FTS)**：精确匹配函数名、类名等技术术语
 - **RRF 融合 (Reciprocal Rank Fusion)**：智能融合多路召回结果
 
 ### 🧠 AST 语义分片
+
 - **Tree-sitter 解析**：支持 TypeScript、JavaScript、Python、Go、Java、Rust、C、C++、C# 九大语言
 - **Dual-Text 策略**：`displayCode` 用于展示，`vectorText` 用于 Embedding
 - **Gap-Aware 合并**：智能处理代码间隙，保持语义完整性
 - **Breadcrumb 注入**：向量文本包含层级路径，提升检索召回率
 
 ### 📊 三阶段上下文扩展
+
 - **E1 邻居扩展**：同文件前后相邻 chunks，保证代码块完整性
 - **E2 面包屑补全**：同一类/函数下的其他方法，理解整体结构
 - **E3 Import 解析**：跨文件依赖追踪（可配置开关）
 
 ### 🎯 智能截断策略 (Smart TopK)
+
 - **Anchor & Floor**：动态阈值 + 绝对下限双保险
 - **Delta Guard**：防止 Top1 outlier 场景的误判
 - **Safe Harbor**：前 N 个结果只检查下限，保证基本召回
 
 ### 🔌 MCP 原生支持
+
 - **MCP Server 模式**：一键启动 Model Context Protocol 服务端
 - **意图与术语分离**：LLM 友好的 API 设计
 - **自动索引**：首次查询自动触发索引，增量更新透明无感
 
 ### ✏️ Prompt Enhancer（提示词增强）
+
 - **多 LLM 支持**：OpenAI / Claude / Gemini 一键切换
 - **三种交互方式**：MCP 工具调用、CLI 命令行、Web UI 浏览器交互
 - **自动语言检测**：中文输入自动用中文回复
@@ -98,9 +104,6 @@ RERANK_BASE_URL=https://api.siliconflow.cn/v1/rerank
 RERANK_MODEL=BAAI/bge-reranker-v2-m3
 RERANK_TOP_N=20
 
-# 忽略模式（可选，逗号分隔）
-# IGNORE_PATTERNS=.venv,node_modules
-
 # Prompt Enhancer 配置（可选，使用 enhance / enhance-prompt 时需要）
 # PROMPT_ENHANCER_ENDPOINT=openai          # 端点：openai / claude / gemini
 # PROMPT_ENHANCER_BASE_URL=                # 自定义 API 地址（代理等场景）
@@ -108,6 +111,23 @@ RERANK_TOP_N=20
 # PROMPT_ENHANCER_MODEL=                   # 自定义模型
 # PROMPT_ENHANCER_TEMPLATE=                # 自定义增强模板文件路径
 ```
+
+### 项目索引配置
+
+项目级索引范围通过仓库根目录的 `cwconfig.json` 控制，不再使用 `IGNORE_PATTERNS` 环境变量。
+
+```json
+{
+  "indexing": {
+    "includePatterns": ["src/**", "packages/*/src/**"],
+    "ignorePatterns": ["**/generated/**", "**/__snapshots__/**"]
+  }
+}
+```
+
+- `includePatterns` 先缩小候选范围；省略时默认整个仓库可参与索引
+- `ignorePatterns` 再从候选范围中剔除路径
+- 内置默认排除规则和项目根 `.gitignore` 仍然会继续生效
 
 ### 索引代码库
 
@@ -182,11 +202,11 @@ ContextWeaver 提供两个 MCP 工具：
 
 #### `codebase-retrieval` 参数说明
 
-| 参数 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| `repo_path` | string | ✅ | 代码库根目录的绝对路径 |
-| `information_request` | string | ✅ | 自然语言形式的语义意图描述 |
-| `technical_terms` | string[] | ❌ | 精确技术术语（类名、函数名等） |
+| 参数                  | 类型     | 必需 | 描述                           |
+| --------------------- | -------- | ---- | ------------------------------ |
+| `repo_path`           | string   | ✅   | 代码库根目录的绝对路径         |
+| `information_request` | string   | ✅   | 自然语言形式的语义意图描述     |
+| `technical_terms`     | string[] | ❌   | 精确技术术语（类名、函数名等） |
 
 #### 设计理念
 
@@ -196,19 +216,19 @@ ContextWeaver 提供两个 MCP 工具：
 
 #### `enhance-prompt` 参数说明
 
-| 参数 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| `prompt` | string | ✅ | 原始提示词 |
-| `conversation_history` | string | ❌ | 对话历史（格式：`User: ...\nAssistant: ...`） |
-| `project_root_path` | string | ❌ | 项目根目录路径 |
+| 参数                   | 类型   | 必需 | 描述                                          |
+| ---------------------- | ------ | ---- | --------------------------------------------- |
+| `prompt`               | string | ✅   | 原始提示词                                    |
+| `conversation_history` | string | ❌   | 对话历史（格式：`User: ...\nAssistant: ...`） |
+| `project_root_path`    | string | ❌   | 项目根目录路径                                |
 
 #### Prompt Enhancer 端点默认值
 
-| 端点 | 默认 Base URL | 默认模型 |
-|------|--------------|---------|
-| `openai` | `https://api.openai.com/v1/chat/completions` | `gpt-4o-mini` |
-| `claude` | `https://api.anthropic.com/v1/messages` | `claude-sonnet-4-20250514` |
-| `gemini` | `https://generativelanguage.googleapis.com/v1beta` | `gemini-2.0-flash` |
+| 端点     | 默认 Base URL                                      | 默认模型                   |
+| -------- | -------------------------------------------------- | -------------------------- |
+| `openai` | `https://api.openai.com/v1/chat/completions`       | `gpt-4o-mini`              |
+| `claude` | `https://api.anthropic.com/v1/messages`            | `claude-sonnet-4-20250514` |
+| `gemini` | `https://generativelanguage.googleapis.com/v1beta` | `gemini-2.0-flash`         |
 
 ## 🏗️ 架构设计
 
@@ -260,15 +280,15 @@ flowchart TB
 
 ### 核心模块说明
 
-| 模块 | 职责 |
-|------|------|
-| **SearchService** | 混合搜索核心，协调向量/词法召回、RRF 融合、Rerank 精排 |
-| **GraphExpander** | 上下文扩展器，执行 E1/E2/E3 三阶段扩展策略 |
-| **ContextPacker** | 上下文打包器，负责段落合并和 Token 预算控制 |
-| **VectorStore** | LanceDB 适配层，管理向量索引的增删改查 |
-| **SQLite (FTS5)** | 元数据存储 + 全文搜索索引 |
-| **SemanticSplitter** | AST 语义分片器，基于 Tree-sitter 解析 |
-| **Prompt Enhancer** | 提示词增强，多 LLM 适配，Web UI 交互 |
+| 模块                 | 职责                                                   |
+| -------------------- | ------------------------------------------------------ |
+| **SearchService**    | 混合搜索核心，协调向量/词法召回、RRF 融合、Rerank 精排 |
+| **GraphExpander**    | 上下文扩展器，执行 E1/E2/E3 三阶段扩展策略             |
+| **ContextPacker**    | 上下文打包器，负责段落合并和 Token 预算控制            |
+| **VectorStore**      | LanceDB 适配层，管理向量索引的增删改查                 |
+| **SQLite (FTS5)**    | 元数据存储 + 全文搜索索引                              |
+| **SemanticSplitter** | AST 语义分片器，基于 Tree-sitter 解析                  |
+| **Prompt Enhancer**  | 提示词增强，多 LLM 适配，Web UI 交互                   |
 
 ## 📁 项目结构
 
@@ -334,57 +354,64 @@ contextweaver/
 
 ### 环境变量
 
-| 变量名 | 必需 | 默认值 | 描述 |
-|--------|------|--------|------|
-| `EMBEDDINGS_API_KEY` | ✅ | - | Embedding API 密钥 |
-| `EMBEDDINGS_BASE_URL` | ✅ | - | Embedding API 地址 |
-| `EMBEDDINGS_MODEL` | ✅ | - | Embedding 模型名称 |
-| `EMBEDDINGS_MAX_CONCURRENCY` | ❌ | 10 | Embedding 并发数 |
-| `EMBEDDINGS_DIMENSIONS` | ❌ | 1024 | 向量维度 |
-| `RERANK_API_KEY` | ✅ | - | Reranker API 密钥 |
-| `RERANK_BASE_URL` | ✅ | - | Reranker API 地址 |
-| `RERANK_MODEL` | ✅ | - | Reranker 模型名称 |
-| `RERANK_TOP_N` | ❌ | 20 | Rerank 返回数量 |
-| `IGNORE_PATTERNS` | ❌ | - | 额外忽略模式 |
-| `PROMPT_ENHANCER_ENDPOINT` | ❌ | `openai` | 增强端点（openai/claude/gemini） |
-| `PROMPT_ENHANCER_TOKEN` | ❌* | - | 增强 API 密钥（*使用 enhance 时必填） |
-| `PROMPT_ENHANCER_BASE_URL` | ❌ | 按端点 | 自定义增强 API 地址 |
-| `PROMPT_ENHANCER_MODEL` | ❌ | 按端点 | 自定义增强模型 |
-| `PROMPT_ENHANCER_TEMPLATE` | ❌ | - | 自定义增强模板路径 |
+| 变量名                       | 必需 | 默认值   | 描述                                   |
+| ---------------------------- | ---- | -------- | -------------------------------------- |
+| `EMBEDDINGS_API_KEY`         | ✅   | -        | Embedding API 密钥                     |
+| `EMBEDDINGS_BASE_URL`        | ✅   | -        | Embedding API 地址                     |
+| `EMBEDDINGS_MODEL`           | ✅   | -        | Embedding 模型名称                     |
+| `EMBEDDINGS_MAX_CONCURRENCY` | ❌   | 10       | Embedding 并发数                       |
+| `EMBEDDINGS_DIMENSIONS`      | ❌   | 1024     | 向量维度                               |
+| `RERANK_API_KEY`             | ✅   | -        | Reranker API 密钥                      |
+| `RERANK_BASE_URL`            | ✅   | -        | Reranker API 地址                      |
+| `RERANK_MODEL`               | ✅   | -        | Reranker 模型名称                      |
+| `RERANK_TOP_N`               | ❌   | 20       | Rerank 返回数量                        |
+| `PROMPT_ENHANCER_ENDPOINT`   | ❌   | `openai` | 增强端点（openai/claude/gemini）       |
+| `PROMPT_ENHANCER_TOKEN`      | ❌\* | -        | 增强 API 密钥（\*使用 enhance 时必填） |
+| `PROMPT_ENHANCER_BASE_URL`   | ❌   | 按端点   | 自定义增强 API 地址                    |
+| `PROMPT_ENHANCER_MODEL`      | ❌   | 按端点   | 自定义增强模型                         |
+| `PROMPT_ENHANCER_TEMPLATE`   | ❌   | -        | 自定义增强模板路径                     |
+
+### 项目配置文件
+
+| 文件            | 作用                                                                             |
+| --------------- | -------------------------------------------------------------------------------- |
+| `cwconfig.json` | 项目级索引范围配置，支持 `indexing.includePatterns` 和 `indexing.ignorePatterns` |
+
+`cwconfig.json` 的过滤顺序为：内置默认排除 → `includePatterns` → `ignorePatterns` → `.gitignore` → 扩展名白名单。
 
 ### 搜索配置参数
 
 ```typescript
 interface SearchConfig {
   // === 召回阶段 ===
-  vectorTopK: number;        // 向量召回数量（默认 30）
-  vectorTopM: number;        // 送入融合的向量结果数（默认 30）
-  ftsTopKFiles: number;      // FTS 召回文件数（默认 15）
-  lexChunksPerFile: number;  // 每文件词法 chunks 数（默认 3）
-  lexTotalChunks: number;    // 词法总 chunks 数（默认 30）
+  vectorTopK: number; // 向量召回数量（默认 30）
+  vectorTopM: number; // 送入融合的向量结果数（默认 30）
+  ftsTopKFiles: number; // FTS 召回文件数（默认 15）
+  lexChunksPerFile: number; // 每文件词法 chunks 数（默认 3）
+  lexTotalChunks: number; // 词法总 chunks 数（默认 30）
 
   // === 融合阶段 ===
-  rrfK0: number;             // RRF 平滑常数（默认 60）
-  wVec: number;              // 向量权重（默认 1.0）
-  wLex: number;              // 词法权重（默认 0.5）
-  fusedTopM: number;         // 融合后送 rerank 数量（默认 40）
+  rrfK0: number; // RRF 平滑常数（默认 60）
+  wVec: number; // 向量权重（默认 1.0）
+  wLex: number; // 词法权重（默认 0.5）
+  fusedTopM: number; // 融合后送 rerank 数量（默认 40）
 
   // === Rerank ===
-  rerankTopN: number;        // Rerank 后保留数量（默认 10）
-  maxRerankChars: number;    // Rerank 文本最大字符数（默认 1200）
+  rerankTopN: number; // Rerank 后保留数量（默认 10）
+  maxRerankChars: number; // Rerank 文本最大字符数（默认 1200）
 
   // === 扩展策略 ===
-  neighborHops: number;      // E1 邻居跳数（默认 2）
-  breadcrumbExpandLimit: number;  // E2 面包屑补全数（默认 3）
-  importFilesPerSeed: number;     // E3 每 seed 导入文件数（默认 0）
-  chunksPerImportFile: number;    // E3 每导入文件 chunks（默认 0）
+  neighborHops: number; // E1 邻居跳数（默认 2）
+  breadcrumbExpandLimit: number; // E2 面包屑补全数（默认 3）
+  importFilesPerSeed: number; // E3 每 seed 导入文件数（默认 0）
+  chunksPerImportFile: number; // E3 每导入文件 chunks（默认 0）
 
   // === Smart TopK ===
-  enableSmartTopK: boolean;  // 启用智能截断（默认 true）
-  smartTopScoreRatio: number;     // 动态阈值比例（默认 0.5）
-  smartMinScore: number;          // 绝对下限（默认 0.25）
-  smartMinK: number;              // Safe Harbor 数量（默认 2）
-  smartMaxK: number;              // 硬上限（默认 15）
+  enableSmartTopK: boolean; // 启用智能截断（默认 true）
+  smartTopScoreRatio: number; // 动态阈值比例（默认 0.5）
+  smartMinScore: number; // 绝对下限（默认 0.25）
+  smartMinK: number; // Safe Harbor 数量（默认 2）
+  smartMaxK: number; // 硬上限（默认 15）
 }
 ```
 
@@ -392,17 +419,17 @@ interface SearchConfig {
 
 ContextWeaver 通过 Tree-sitter 原生支持以下编程语言的 AST 解析：
 
-| 语言 | AST 解析 | Import 解析 | 文件扩展名 |
-|------|----------|-------------|-----------|
-| TypeScript | ✅ | ✅ | `.ts`, `.tsx` |
-| JavaScript | ✅ | ✅ | `.js`, `.jsx`, `.mjs` |
-| Python | ✅ | ✅ | `.py` |
-| Go | ✅ | ✅ | `.go` |
-| Java | ✅ | ✅ | `.java` |
-| Rust | ✅ | ✅ | `.rs` |
-| C | ✅ | ✅ | `.c`, `.h` |
-| C++ | ✅ | ✅ | `.cpp`, `.hpp`, `.cc`, `.cxx` |
-| C# | ✅ | ✅ | `.cs` |
+| 语言       | AST 解析 | Import 解析 | 文件扩展名                    |
+| ---------- | -------- | ----------- | ----------------------------- |
+| TypeScript | ✅       | ✅          | `.ts`, `.tsx`                 |
+| JavaScript | ✅       | ✅          | `.js`, `.jsx`, `.mjs`         |
+| Python     | ✅       | ✅          | `.py`                         |
+| Go         | ✅       | ✅          | `.go`                         |
+| Java       | ✅       | ✅          | `.java`                       |
+| Rust       | ✅       | ✅          | `.rs`                         |
+| C          | ✅       | ✅          | `.c`, `.h`                    |
+| C++        | ✅       | ✅          | `.cpp`, `.hpp`, `.cc`, `.cxx` |
+| C#         | ✅       | ✅          | `.cs`                         |
 
 其他语言会采用基于行的 Fallback 分片策略，仍可正常索引和搜索。
 

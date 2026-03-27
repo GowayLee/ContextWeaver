@@ -37,15 +37,15 @@ contextweaver mcp             # 启动 MCP 服务端
 
 ### Key Modules
 
-| Module | Location | Responsibility |
-|--------|----------|----------------|
-| **SearchService** | `src/search/SearchService.ts` | 混合搜索核心，协调向量/词法召回、RRF 融合、Rerank 精排 |
-| **GraphExpander** | `src/search/GraphExpander.ts` | 三阶段上下文扩展 (E1 邻居/E2 面包屑/E3 导入) |
-| **ContextPacker** | `src/search/ContextPacker.ts` | 段落合并和 Token 预算控制 |
-| **SemanticSplitter** | `src/chunking/SemanticSplitter.ts` | AST 语义分片器 (Tree-sitter) |
-| **VectorStore** | `src/vectorStore/index.ts` | LanceDB 适配层 |
-| **Database** | `src/db/index.ts` | SQLite + FTS5 元数据和全文索引 |
-| **MCP Server** | `src/mcp/server.ts` | Model Context Protocol 服务端实现 |
+| Module               | Location                           | Responsibility                                         |
+| -------------------- | ---------------------------------- | ------------------------------------------------------ |
+| **SearchService**    | `src/search/SearchService.ts`      | 混合搜索核心，协调向量/词法召回、RRF 融合、Rerank 精排 |
+| **GraphExpander**    | `src/search/GraphExpander.ts`      | 三阶段上下文扩展 (E1 邻居/E2 面包屑/E3 导入)           |
+| **ContextPacker**    | `src/search/ContextPacker.ts`      | 段落合并和 Token 预算控制                              |
+| **SemanticSplitter** | `src/chunking/SemanticSplitter.ts` | AST 语义分片器 (Tree-sitter)                           |
+| **VectorStore**      | `src/vectorStore/index.ts`         | LanceDB 适配层                                         |
+| **Database**         | `src/db/index.ts`                  | SQLite + FTS5 元数据和全文索引                         |
+| **MCP Server**       | `src/mcp/server.ts`                | Model Context Protocol 服务端实现                      |
 
 ### Import Resolvers
 

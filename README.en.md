@@ -25,32 +25,38 @@
 ## ✨ Key Features
 
 ### 🔍 Hybrid Retrieval Engine
+
 - **Vector Retrieval**: Deep understanding via semantic similarity
 - **Lexical Retrieval (FTS)**: Exact matching of function names, class names, and technical terms
 - **RRF Fusion (Reciprocal Rank Fusion)**: Intelligent fusion of multi-path recall results
 
 ### 🧠 AST-Based Semantic Chunking
+
 - **Tree-sitter Parsing**: Supports TypeScript, JavaScript, Python, Go, Java, Rust, C, C++, C# — 9 languages
 - **Dual-Text Strategy**: `displayCode` for display, `vectorText` for embedding
 - **Gap-Aware Merging**: Smart handling of code gaps while preserving semantic integrity
 - **Breadcrumb Injection**: Hierarchical path in vector text improves retrieval recall
 
 ### 📊 Three-Phase Context Expansion
+
 - **E1 Neighbor Expansion**: Adjacent chunks in the same file for code block completeness
 - **E2 Breadcrumb Completion**: Other methods under the same class/function for structural understanding
 - **E3 Import Resolution**: Cross-file dependency tracking (configurable)
 
 ### 🎯 Smart TopK Cutoff
+
 - **Anchor & Floor**: Dynamic threshold + absolute lower bound
 - **Delta Guard**: Prevents misjudgment in Top1 outlier scenarios
 - **Safe Harbor**: First N results only check the lower bound, ensuring basic recall
 
 ### 🔌 Native MCP Support
+
 - **MCP Server Mode**: One-click launch of Model Context Protocol server
 - **Zen Design**: Intent-term separation, LLM-friendly API design
 - **Auto-Indexing**: First query triggers indexing automatically, incremental updates are transparent
 
 ### ✏️ Prompt Enhancer
+
 - **Multi-LLM Support**: Switch between OpenAI / Claude / Gemini with one config
 - **Three Interaction Modes**: MCP tool call, CLI command, Web UI browser interaction
 - **Auto Language Detection**: Chinese input automatically gets Chinese output
@@ -98,9 +104,6 @@ RERANK_BASE_URL=https://api.siliconflow.cn/v1/rerank
 RERANK_MODEL=BAAI/bge-reranker-v2-m3
 RERANK_TOP_N=20
 
-# Ignore patterns (optional, comma-separated)
-# IGNORE_PATTERNS=.venv,node_modules
-
 # Prompt Enhancer (optional, required when using enhance / enhance-prompt)
 # PROMPT_ENHANCER_ENDPOINT=openai          # Endpoint: openai / claude / gemini
 # PROMPT_ENHANCER_BASE_URL=                # Custom API URL (for proxies, etc.)
@@ -108,6 +111,23 @@ RERANK_TOP_N=20
 # PROMPT_ENHANCER_MODEL=                   # Custom model override
 # PROMPT_ENHANCER_TEMPLATE=                # Custom template file path
 ```
+
+### Project Indexing Config
+
+Project-specific indexing scope now lives in a repository-root `cwconfig.json` file instead of the old `IGNORE_PATTERNS` environment variable.
+
+```json
+{
+  "indexing": {
+    "includePatterns": ["src/**", "packages/*/src/**"],
+    "ignorePatterns": ["**/generated/**", "**/__snapshots__/**"]
+  }
+}
+```
+
+- `includePatterns` narrows the candidate set first; omit it to allow the whole repository
+- `ignorePatterns` subtracts from that candidate set
+- Built-in default excludes and the repository `.gitignore` still apply
 
 ### Index a Codebase
 
@@ -182,11 +202,11 @@ ContextWeaver provides two MCP tools:
 
 #### `codebase-retrieval` Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `repo_path` | string | ✅ | Absolute path to the repository root |
-| `information_request` | string | ✅ | Semantic intent in natural language |
-| `technical_terms` | string[] | ❌ | Exact technical terms (class names, function names, etc.) |
+| Parameter             | Type     | Required | Description                                               |
+| --------------------- | -------- | -------- | --------------------------------------------------------- |
+| `repo_path`           | string   | ✅       | Absolute path to the repository root                      |
+| `information_request` | string   | ✅       | Semantic intent in natural language                       |
+| `technical_terms`     | string[] | ❌       | Exact technical terms (class names, function names, etc.) |
 
 #### Zen Design Philosophy
 
@@ -196,19 +216,19 @@ ContextWeaver provides two MCP tools:
 
 #### `enhance-prompt` Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `prompt` | string | ✅ | The original prompt to enhance |
-| `conversation_history` | string | ❌ | Conversation history (`User: ...\nAssistant: ...`) |
-| `project_root_path` | string | ❌ | Project root path for context |
+| Parameter              | Type   | Required | Description                                        |
+| ---------------------- | ------ | -------- | -------------------------------------------------- |
+| `prompt`               | string | ✅       | The original prompt to enhance                     |
+| `conversation_history` | string | ❌       | Conversation history (`User: ...\nAssistant: ...`) |
+| `project_root_path`    | string | ❌       | Project root path for context                      |
 
 #### Prompt Enhancer Endpoint Defaults
 
-| Endpoint | Default Base URL | Default Model |
-|----------|-----------------|---------------|
-| `openai` | `https://api.openai.com/v1/chat/completions` | `gpt-4o-mini` |
-| `claude` | `https://api.anthropic.com/v1/messages` | `claude-sonnet-4-20250514` |
-| `gemini` | `https://generativelanguage.googleapis.com/v1beta` | `gemini-2.0-flash` |
+| Endpoint | Default Base URL                                   | Default Model              |
+| -------- | -------------------------------------------------- | -------------------------- |
+| `openai` | `https://api.openai.com/v1/chat/completions`       | `gpt-4o-mini`              |
+| `claude` | `https://api.anthropic.com/v1/messages`            | `claude-sonnet-4-20250514` |
+| `gemini` | `https://generativelanguage.googleapis.com/v1beta` | `gemini-2.0-flash`         |
 
 ## 🏗️ Architecture
 
@@ -260,15 +280,15 @@ flowchart TB
 
 ### Core Modules
 
-| Module | Responsibility |
-|--------|---------------|
-| **SearchService** | Hybrid search core: vector/lexical recall, RRF fusion, reranking |
-| **GraphExpander** | Context expander: E1/E2/E3 three-phase expansion |
-| **ContextPacker** | Context packer: paragraph merging and token budget control |
-| **VectorStore** | LanceDB adapter: vector index CRUD |
-| **SQLite (FTS5)** | Metadata storage + full-text search index |
-| **SemanticSplitter** | AST semantic chunker based on Tree-sitter |
-| **Prompt Enhancer** | Prompt enhancement: multi-LLM adapters, Web UI interaction |
+| Module               | Responsibility                                                   |
+| -------------------- | ---------------------------------------------------------------- |
+| **SearchService**    | Hybrid search core: vector/lexical recall, RRF fusion, reranking |
+| **GraphExpander**    | Context expander: E1/E2/E3 three-phase expansion                 |
+| **ContextPacker**    | Context packer: paragraph merging and token budget control       |
+| **VectorStore**      | LanceDB adapter: vector index CRUD                               |
+| **SQLite (FTS5)**    | Metadata storage + full-text search index                        |
+| **SemanticSplitter** | AST semantic chunker based on Tree-sitter                        |
+| **Prompt Enhancer**  | Prompt enhancement: multi-LLM adapters, Web UI interaction       |
 
 ## 📁 Project Structure
 
@@ -325,39 +345,46 @@ contextweaver/
 
 ### Environment Variables
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `EMBEDDINGS_API_KEY` | ✅ | - | Embedding API key |
-| `EMBEDDINGS_BASE_URL` | ✅ | - | Embedding API URL |
-| `EMBEDDINGS_MODEL` | ✅ | - | Embedding model name |
-| `EMBEDDINGS_MAX_CONCURRENCY` | ❌ | 10 | Embedding concurrency |
-| `EMBEDDINGS_DIMENSIONS` | ❌ | 1024 | Vector dimensions |
-| `RERANK_API_KEY` | ✅ | - | Reranker API key |
-| `RERANK_BASE_URL` | ✅ | - | Reranker API URL |
-| `RERANK_MODEL` | ✅ | - | Reranker model name |
-| `RERANK_TOP_N` | ❌ | 20 | Rerank return count |
-| `IGNORE_PATTERNS` | ❌ | - | Extra ignore patterns |
-| `PROMPT_ENHANCER_ENDPOINT` | ❌ | `openai` | Enhancer endpoint (openai/claude/gemini) |
-| `PROMPT_ENHANCER_TOKEN` | ❌* | - | Enhancer API key (*required when using enhance) |
-| `PROMPT_ENHANCER_BASE_URL` | ❌ | per endpoint | Custom enhancer API URL |
-| `PROMPT_ENHANCER_MODEL` | ❌ | per endpoint | Custom enhancer model |
-| `PROMPT_ENHANCER_TEMPLATE` | ❌ | - | Custom enhancer template path |
+| Variable                     | Required | Default      | Description                                      |
+| ---------------------------- | -------- | ------------ | ------------------------------------------------ |
+| `EMBEDDINGS_API_KEY`         | ✅       | -            | Embedding API key                                |
+| `EMBEDDINGS_BASE_URL`        | ✅       | -            | Embedding API URL                                |
+| `EMBEDDINGS_MODEL`           | ✅       | -            | Embedding model name                             |
+| `EMBEDDINGS_MAX_CONCURRENCY` | ❌       | 10           | Embedding concurrency                            |
+| `EMBEDDINGS_DIMENSIONS`      | ❌       | 1024         | Vector dimensions                                |
+| `RERANK_API_KEY`             | ✅       | -            | Reranker API key                                 |
+| `RERANK_BASE_URL`            | ✅       | -            | Reranker API URL                                 |
+| `RERANK_MODEL`               | ✅       | -            | Reranker model name                              |
+| `RERANK_TOP_N`               | ❌       | 20           | Rerank return count                              |
+| `PROMPT_ENHANCER_ENDPOINT`   | ❌       | `openai`     | Enhancer endpoint (openai/claude/gemini)         |
+| `PROMPT_ENHANCER_TOKEN`      | ❌\*     | -            | Enhancer API key (\*required when using enhance) |
+| `PROMPT_ENHANCER_BASE_URL`   | ❌       | per endpoint | Custom enhancer API URL                          |
+| `PROMPT_ENHANCER_MODEL`      | ❌       | per endpoint | Custom enhancer model                            |
+| `PROMPT_ENHANCER_TEMPLATE`   | ❌       | -            | Custom enhancer template path                    |
+
+### Project Config File
+
+| File            | Purpose                                                                                           |
+| --------------- | ------------------------------------------------------------------------------------------------- |
+| `cwconfig.json` | Project-level indexing scope config with `indexing.includePatterns` and `indexing.ignorePatterns` |
+
+Filtering order inside `cwconfig.json` is: built-in default excludes -> `includePatterns` -> `ignorePatterns` -> `.gitignore` -> extension allowlist.
 
 ## 🌍 Language Support
 
 ContextWeaver natively supports AST parsing for the following languages via Tree-sitter:
 
-| Language | AST Parsing | Import Resolution | File Extensions |
-|----------|-------------|-------------------|-----------------|
-| TypeScript | ✅ | ✅ | `.ts`, `.tsx` |
-| JavaScript | ✅ | ✅ | `.js`, `.jsx`, `.mjs` |
-| Python | ✅ | ✅ | `.py` |
-| Go | ✅ | ✅ | `.go` |
-| Java | ✅ | ✅ | `.java` |
-| Rust | ✅ | ✅ | `.rs` |
-| C | ✅ | ✅ | `.c`, `.h` |
-| C++ | ✅ | ✅ | `.cpp`, `.hpp`, `.cc`, `.cxx` |
-| C# | ✅ | ✅ | `.cs` |
+| Language   | AST Parsing | Import Resolution | File Extensions               |
+| ---------- | ----------- | ----------------- | ----------------------------- |
+| TypeScript | ✅          | ✅                | `.ts`, `.tsx`                 |
+| JavaScript | ✅          | ✅                | `.js`, `.jsx`, `.mjs`         |
+| Python     | ✅          | ✅                | `.py`                         |
+| Go         | ✅          | ✅                | `.go`                         |
+| Java       | ✅          | ✅                | `.java`                       |
+| Rust       | ✅          | ✅                | `.rs`                         |
+| C          | ✅          | ✅                | `.c`, `.h`                    |
+| C++        | ✅          | ✅                | `.cpp`, `.hpp`, `.cc`, `.cxx` |
+| C#         | ✅          | ✅                | `.cs`                         |
 
 Other languages use a line-based fallback chunking strategy and can still be indexed and searched.
 

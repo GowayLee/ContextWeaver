@@ -83,9 +83,6 @@ RERANK_BASE_URL=https://api.siliconflow.cn/v1/rerank
 RERANK_MODEL=BAAI/bge-reranker-v2-m3
 RERANK_TOP_N=20
 
-# 索引忽略模式（可选，逗号分隔，默认已包含常见忽略项）
-# IGNORE_PATTERNS=.venv,node_modules
-
 # Prompt Enhancer 配置（可选，使用 enhance-prompt 工具时需要）
 # PROMPT_ENHANCER_ENDPOINT=openai
 # PROMPT_ENHANCER_BASE_URL=
@@ -127,37 +124,42 @@ async function ensureIndexed(
   const { withLock } = await import('../../utils/lock.js');
   const { scan } = await import('../../scanner/index.js');
 
-  await withLock(projectId, 'index', async () => {
-    const wasIndexed = isProjectIndexed(projectId);
+  await withLock(
+    projectId,
+    'index',
+    async () => {
+      const wasIndexed = isProjectIndexed(projectId);
 
-    if (!wasIndexed) {
+      if (!wasIndexed) {
+        logger.info(
+          { repoPath, projectId: projectId.slice(0, 10) },
+          '代码库未初始化，开始首次索引...',
+        );
+        onProgress?.(0, 100, '代码库未索引，开始首次索引...');
+      } else {
+        logger.debug({ projectId: projectId.slice(0, 10) }, '执行增量索引...');
+      }
+
+      const startTime = Date.now();
+      const stats = await scan(repoPath, { vectorIndex: true, onProgress });
+      const elapsed = Date.now() - startTime;
+
       logger.info(
-        { repoPath, projectId: projectId.slice(0, 10) },
-        '代码库未初始化，开始首次索引...',
+        {
+          projectId: projectId.slice(0, 10),
+          isFirstTime: !wasIndexed,
+          totalFiles: stats.totalFiles,
+          added: stats.added,
+          modified: stats.modified,
+          deleted: stats.deleted,
+          vectorIndex: stats.vectorIndex,
+          elapsedMs: elapsed,
+        },
+        '索引完成',
       );
-      onProgress?.(0, 100, '代码库未索引，开始首次索引...');
-    } else {
-      logger.debug({ projectId: projectId.slice(0, 10) }, '执行增量索引...');
-    }
-
-    const startTime = Date.now();
-    const stats = await scan(repoPath, { vectorIndex: true, onProgress });
-    const elapsed = Date.now() - startTime;
-
-    logger.info(
-      {
-        projectId: projectId.slice(0, 10),
-        isFirstTime: !wasIndexed,
-        totalFiles: stats.totalFiles,
-        added: stats.added,
-        modified: stats.modified,
-        deleted: stats.deleted,
-        vectorIndex: stats.vectorIndex,
-        elapsedMs: elapsed,
-      },
-      '索引完成',
-    );
-  }, INDEX_LOCK_TIMEOUT_MS);
+    },
+    INDEX_LOCK_TIMEOUT_MS,
+  );
 }
 
 // 工具处理函数
@@ -287,7 +289,9 @@ export async function handleCodebaseRetrieval(
 /**
  * 格式化为 MCP 响应格式
  */
-function formatMcpResponse(pack: ContextPack): { content: Array<{ type: 'text'; text: string }> } {
+function formatMcpResponse(pack: ContextPack): {
+  content: Array<{ type: 'text'; text: string }>;
+} {
   const { files, seeds } = pack;
 
   // 构建文件内容块
