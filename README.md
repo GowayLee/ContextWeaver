@@ -30,15 +30,16 @@
 ## 安装
 
 ```bash
-pnpm build
-npm pack
-npm install -g ./haurynlee-contextweaver-*.tgz
+npm install -g @haurynlee/contextweaver
 ```
 
 ## 初始化
 
 ```bash
 contextweaver init
+
+# Or `cw` for short
+cw init
 ```
 
 编辑 `~/.contextweaver/.env`，填入 Embedding 与 Reranker 配置：

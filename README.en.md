@@ -30,15 +30,16 @@
 ## Install
 
 ```bash
-pnpm build
-npm pack
-npm install -g ./haurynlee-contextweaver-*.tgz
+npm install -g @haurynlee/contextweaver
 ```
 
 ## Initialize
 
 ```bash
 contextweaver init
+
+# Or `cw` for short
+cw init
 ```
 
 Edit `~/.contextweaver/.env` with embedding and reranker settings:
