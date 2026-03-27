@@ -72,12 +72,15 @@
 ### 安装
 
 ```bash
-# 全局安装（带 Prompt Enhancer 的增强版）
-npm install -g @haurynlee/contextweaver
+# 本地构建发布包
+pnpm build
+npm pack
 
-# 或使用 pnpm
-pnpm add -g @haurynlee/contextweaver
+# 全局安装本地 tarball
+npm install -g ./haurynlee-contextweaver-*.tgz
 ```
+
+当前不提供 npm 远程安装说明，推荐先在仓库本地构建并通过 tarball 安装。
 
 ### 初始化配置
 

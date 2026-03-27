@@ -72,12 +72,15 @@
 ### Installation
 
 ```bash
-# Global install (enhanced version with Prompt Enhancer)
-npm install -g @haurynlee/contextweaver
+# Build a local release tarball
+pnpm build
+npm pack
 
-# Or using pnpm
-pnpm add -g @haurynlee/contextweaver
+# Install the local tarball globally
+npm install -g ./haurynlee-contextweaver-*.tgz
 ```
+
+There is no published npm install path documented right now; the recommended flow is to build locally and install from the generated tarball.
 
 ### Initialize Configuration
 
