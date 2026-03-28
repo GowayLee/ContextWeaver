@@ -153,6 +153,7 @@ ContextWeaver uses Tree-sitter to provide native AST parsing support for the fol
 
 ## Acknowledgements
 
+- [Linux DO](https://linux.do/) - An amazing technical community inspired this project
 - [hsingjui/ContextWeaver](https://github.com/hsingjui/ContextWeaver) - original project
 - [lyy0709/ContextWeaver](https://github.com/lyy0709/ContextWeaver) - community fork that added Prompt Enhancement
 - [Tree-sitter](https://tree-sitter.github.io/tree-sitter/) - high-performance syntax parsing

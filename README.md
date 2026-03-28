@@ -153,6 +153,7 @@ ContextWeaver 通过 Tree-sitter 原生支持以下编程语言的 AST 解析：
 
 ## 致谢
 
+- [Linux DO](https://linux.do/) - 本项目的大量灵感来自这个非常哇塞的技术社区~
 - [hsingjui/ContextWeaver](https://github.com/hsingjui/ContextWeaver) - 原项目
 - [lyy0709/ContextWeaver](https://github.com/lyy0709/ContextWeaver) - 社区 Fork, 增加了 Prompt Enhancement 功能
 - [Tree-sitter](https://tree-sitter.github.io/tree-sitter/) - 高性能语法解析
