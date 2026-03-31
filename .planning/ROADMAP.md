@@ -48,12 +48,12 @@ Plans:
 1. User can see provider type, failing stage, HTTP status, and upstream error summary when `index` fails due to an embedding error
 2. User can see a safe diagnostic request summary (model name, batch size, dimensions, endpoint host) without any API keys or secrets being exposed
 3. User can distinguish failure categories: authentication, rate limit, batch-too-large, dimension mismatch, timeout, network failure, and incompatible response format
-   **Plans**: TBD
+   **Plans**: 2 plans
 
 Plans:
 
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [x] 02-01-PLAN.md — 为 embedding/indexer 建立 provider diagnostics 契约与分类回归测试
+- [ ] 02-02-PLAN.md — 在顶层 CLI 渲染安全的双层 provider 诊断输出
 
 ### Phase 3: Index Visibility
 

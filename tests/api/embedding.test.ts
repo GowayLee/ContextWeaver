@@ -174,7 +174,7 @@ describe('EmbeddingClient provider diagnostics', () => {
     {
       name: 'rate limit from quota signals',
       response: httpErrorResponse({
-        status: 429,
+        status: 400,
         message: 'Quota exceeded',
         type: 'rate_limit_error',
         code: 'quota_exceeded',

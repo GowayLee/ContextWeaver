@@ -14,6 +14,31 @@
 import { type EmbeddingConfig, getEmbeddingConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 
+export type EmbeddingFailureCategory =
+  | 'authentication'
+  | 'rate_limit'
+  | 'batch_too_large'
+  | 'dimension_mismatch'
+  | 'timeout'
+  | 'network'
+  | 'incompatible_response'
+  | 'unknown';
+
+export interface EmbeddingFailureDiagnostics {
+  stage: 'embed';
+  category: EmbeddingFailureCategory;
+  httpStatus: number | null;
+  providerType: string | null;
+  providerCode: string | null;
+  upstreamMessage: string;
+  endpointHost: string;
+  endpointPath: string;
+  model: string;
+  batchSize: number;
+  dimensions: number;
+  requestCount: number;
+}
+
 /** Embedding 请求体 */
 interface EmbeddingRequest {
   model: string;
@@ -57,11 +82,29 @@ export interface EmbeddingResult {
 
 export class EmbeddingFatalError extends Error {
   readonly stage = 'embed';
+  readonly diagnostics: EmbeddingFailureDiagnostics;
 
-  constructor(message: string, options?: { cause?: unknown }) {
+  constructor(
+    message: string,
+    options?: { cause?: unknown; diagnostics?: EmbeddingFailureDiagnostics },
+  ) {
     super(message, options);
     this.name = 'EmbeddingFatalError';
+    this.diagnostics =
+      options?.diagnostics ??
+      createFallbackDiagnostics({
+        upstreamMessage: message,
+      });
   }
+}
+
+interface EmbeddingRequestContext {
+  endpointHost: string;
+  endpointPath: string;
+  model: string;
+  batchSize: number;
+  dimensions: number;
+  requestCount: number;
 }
 
 interface EmbeddingSession {
@@ -371,7 +414,7 @@ export class EmbeddingClient {
     // 使用速率限制控制器处理各批次
     const batchResults = await Promise.all(
       batches.map((batch, batchIndex) =>
-        this.processWithRateLimit(batch, batchIndex * batchSize, progress, session),
+        this.processWithRateLimit(batch, batchIndex * batchSize, batchSize, progress, session),
       ),
     );
 
@@ -389,13 +432,16 @@ export class EmbeddingClient {
   private async processWithRateLimit(
     texts: string[],
     startIndex: number,
+    batchSize: number,
     progress: ProgressTracker,
     session: EmbeddingSession,
   ): Promise<EmbeddingResult[]> {
     const MAX_NETWORK_RETRIES = 3;
+    const MAX_RATE_LIMIT_RETRIES = 3;
     const INITIAL_RETRY_DELAY_MS = 1000;
 
     let networkRetries = 0;
+    let rateLimitRetries = 0;
 
     while (true) {
       if (session.fatalError) {
@@ -411,7 +457,7 @@ export class EmbeddingClient {
       }
 
       try {
-        const result = await this.processBatch(texts, startIndex, progress, session);
+        const result = await this.processBatch(texts, startIndex, batchSize, progress, session);
 
         if (session.fatalError) {
           this.rateLimiter.releaseFailure();
@@ -426,18 +472,34 @@ export class EmbeddingClient {
           throw session.fatalError;
         }
 
-        const error = err as { message?: string; code?: string };
-        const errorMessage = error.message || '';
-        const isRateLimited = errorMessage.includes('429') || errorMessage.includes('rate');
-        const isNetworkError = this.isNetworkError(err);
+        const fatalError = err instanceof EmbeddingFatalError ? err : null;
+        const error = err as { message?: string; code?: string } | undefined;
+        const errorMessage = fatalError?.diagnostics.upstreamMessage || error?.message || '';
+        const isRateLimited =
+          fatalError?.diagnostics.httpStatus === 429 ||
+          errorMessage.includes('429') ||
+          errorMessage.includes('rate');
+        const isTimeoutError =
+          fatalError?.diagnostics.category === 'timeout' ||
+          this.isTimeoutError(fatalError?.cause ?? err);
+        const isNetworkError =
+          fatalError?.diagnostics.category === 'network' ||
+          this.isNetworkError(fatalError?.cause ?? err);
 
         if (isRateLimited) {
-          // 429 错误：释放槽位，触发全局暂停
-          this.rateLimiter.releaseForRetry();
-          await this.rateLimiter.triggerRateLimit();
-          networkRetries = 0; // 重置网络重试计数
-          // 循环继续，重新获取槽位并重试
-        } else if (isNetworkError && networkRetries < MAX_NETWORK_RETRIES) {
+          if (rateLimitRetries < MAX_RATE_LIMIT_RETRIES) {
+            // 429 错误：释放槽位，触发全局暂停
+            rateLimitRetries++;
+            this.rateLimiter.releaseForRetry();
+            await this.rateLimiter.triggerRateLimit();
+            networkRetries = 0; // 重置网络重试计数
+            // 循环继续，重新获取槽位并重试
+          } else {
+            const fatalError = this.failSession(session, err);
+            this.rateLimiter.releaseFailure();
+            throw fatalError;
+          }
+        } else if (!isTimeoutError && isNetworkError && networkRetries < MAX_NETWORK_RETRIES) {
           // 网络错误：指数退避重试
           networkRetries++;
           const delayMs = INITIAL_RETRY_DELAY_MS * 2 ** (networkRetries - 1);
@@ -457,13 +519,14 @@ export class EmbeddingClient {
           // 循环继续，重新获取槽位并重试
         } else {
           // 其他错误或重试次数耗尽：抛出异常
+          const fatalError = this.failSession(session, err);
           this.rateLimiter.releaseFailure();
 
           if (isNetworkError) {
             logger.error({ error: errorMessage, retries: networkRetries }, '网络错误重试次数耗尽');
           }
 
-          throw this.failSession(session, err);
+          throw fatalError;
         }
       }
     }
@@ -481,9 +544,9 @@ export class EmbeddingClient {
    * - socket hang up: 套接字意外关闭
    */
   private isNetworkError(err: unknown): boolean {
-    const error = err as { message?: string; code?: string };
-    const message = (error.message || '').toLowerCase();
-    const code = error.code || '';
+    const error = err as { message?: string; code?: string } | undefined;
+    const message = (error?.message || '').toLowerCase();
+    const code = error?.code || '';
 
     const networkErrorPatterns = [
       'terminated',
@@ -513,12 +576,27 @@ export class EmbeddingClient {
     return false;
   }
 
+  private isTimeoutError(err: unknown): boolean {
+    const error = err as { message?: string; code?: string; name?: string } | undefined;
+    const message = (error?.message || '').toLowerCase();
+    const code = (error?.code || '').toUpperCase();
+    const name = error?.name || '';
+
+    return (
+      name === 'AbortError' ||
+      code === 'ETIMEDOUT' ||
+      message.includes('timeout') ||
+      message.includes('timed out')
+    );
+  }
+
   /**
    * 处理单个批次（单次请求，不含重试逻辑）
    */
   private async processBatch(
     texts: string[],
     startIndex: number,
+    batchSize: number,
     progress: ProgressTracker,
     session: EmbeddingSession,
   ): Promise<EmbeddingResult[]> {
@@ -531,6 +609,7 @@ export class EmbeddingClient {
       input: texts,
       encoding_format: 'float',
     };
+    const requestContext = this.createRequestContext(batchSize, texts.length);
 
     const controller = new AbortController();
     session.controllers.add(controller);
@@ -546,16 +625,25 @@ export class EmbeddingClient {
         signal: controller.signal,
       });
 
-      const data = (await response.json()) as EmbeddingResponse & EmbeddingErrorResponse;
+      const data = await this.readEmbeddingResponse(response, requestContext);
 
       if (!response.ok || data.error) {
-        const errorMsg = data.error?.message || `HTTP ${response.status}`;
-        throw new Error(`Embedding API 错误: ${errorMsg}`);
+        const upstreamMessage = data.error?.message || `HTTP ${response.status}`;
+        throw new EmbeddingFatalError(`Embedding API 错误: ${upstreamMessage}`, {
+          diagnostics: this.createFailureDiagnostics(requestContext, {
+            httpStatus: response.status,
+            providerType: data.error?.type ?? null,
+            providerCode: data.error?.code ?? null,
+            upstreamMessage,
+          }),
+        });
       }
 
       if (session.fatalError) {
         throw session.fatalError;
       }
+
+      this.assertCompatibleResponse(data, texts, requestContext);
 
       const results: EmbeddingResult[] = data.data.map((item) => ({
         text: texts[item.index],
@@ -571,6 +659,24 @@ export class EmbeddingClient {
       progress.recordBatch(data.usage?.total_tokens || 0);
 
       return results;
+    } catch (err) {
+      if (err instanceof EmbeddingFatalError) {
+        throw err;
+      }
+
+      throw new EmbeddingFatalError(this.formatEmbeddingErrorMessage(err), {
+        cause: err,
+        diagnostics: this.createFailureDiagnostics(
+          requestContext,
+          {
+            httpStatus: null,
+            providerType: null,
+            providerCode: null,
+            upstreamMessage: this.getUpstreamMessage(err),
+          },
+          err,
+        ),
+      });
     } finally {
       session.controllers.delete(controller);
     }
@@ -581,8 +687,16 @@ export class EmbeddingClient {
       return session.fatalError;
     }
 
-    const message = err instanceof Error ? err.message : String(err);
-    const fatalError = new EmbeddingFatalError(message, { cause: err });
+    const fatalError =
+      err instanceof EmbeddingFatalError
+        ? err
+        : new EmbeddingFatalError(this.formatEmbeddingErrorMessage(err), {
+            cause: err,
+            diagnostics: createFallbackDiagnostics({
+              category: this.classifyFailure(null, null, null, this.getUpstreamMessage(err), err),
+              upstreamMessage: this.getUpstreamMessage(err),
+            }),
+          });
     session.fatalError = fatalError;
 
     for (const controller of session.controllers) {
@@ -605,6 +719,215 @@ export class EmbeddingClient {
   getRateLimiterStatus(): ReturnType<RateLimitController['getStatus']> {
     return this.rateLimiter.getStatus();
   }
+
+  private createRequestContext(batchSize: number, requestCount: number): EmbeddingRequestContext {
+    const endpoint = parseEndpoint(this.config.baseUrl);
+    return {
+      endpointHost: endpoint.host,
+      endpointPath: endpoint.path,
+      model: this.config.model,
+      batchSize,
+      dimensions: this.config.dimensions,
+      requestCount,
+    };
+  }
+
+  private async readEmbeddingResponse(
+    response: Response,
+    requestContext: EmbeddingRequestContext,
+  ): Promise<Partial<EmbeddingResponse & EmbeddingErrorResponse>> {
+    try {
+      return (await response.json()) as Partial<EmbeddingResponse & EmbeddingErrorResponse>;
+    } catch (err) {
+      throw new EmbeddingFatalError('Embedding API 返回了不可解析的响应', {
+        cause: err,
+        diagnostics: this.createFailureDiagnostics(
+          requestContext,
+          {
+            httpStatus: response.status,
+            providerType: null,
+            providerCode: null,
+            upstreamMessage: 'Embedding API 返回了不可解析的响应',
+            category: 'incompatible_response',
+          },
+          err,
+        ),
+      });
+    }
+  }
+
+  private assertCompatibleResponse(
+    data: Partial<EmbeddingResponse & EmbeddingErrorResponse>,
+    texts: string[],
+    requestContext: EmbeddingRequestContext,
+  ): asserts data is EmbeddingResponse {
+    if (!Array.isArray(data.data)) {
+      throw new EmbeddingFatalError('Embedding API 返回缺少 data 数组', {
+        diagnostics: this.createFailureDiagnostics(requestContext, {
+          httpStatus: 200,
+          providerType: null,
+          providerCode: null,
+          upstreamMessage: 'Embedding API 返回缺少 data 数组',
+          category: 'incompatible_response',
+        }),
+      });
+    }
+
+    for (const item of data.data) {
+      if (typeof item?.index !== 'number' || item.index < 0 || item.index >= texts.length) {
+        throw new EmbeddingFatalError('Embedding API 返回了越界的结果索引', {
+          diagnostics: this.createFailureDiagnostics(requestContext, {
+            httpStatus: 200,
+            providerType: null,
+            providerCode: null,
+            upstreamMessage: 'Embedding API 返回了越界的结果索引',
+            category: 'incompatible_response',
+          }),
+        });
+      }
+
+      if (
+        !Array.isArray(item.embedding) ||
+        item.embedding.some((value) => typeof value !== 'number')
+      ) {
+        throw new EmbeddingFatalError('Embedding API 返回了非数值向量', {
+          diagnostics: this.createFailureDiagnostics(requestContext, {
+            httpStatus: 200,
+            providerType: null,
+            providerCode: null,
+            upstreamMessage: 'Embedding API 返回了非数值向量',
+            category: 'incompatible_response',
+          }),
+        });
+      }
+
+      if (item.embedding.length !== this.config.dimensions) {
+        throw new EmbeddingFatalError(
+          `Embedding 向量维度不匹配: expected ${this.config.dimensions}, got ${item.embedding.length}`,
+          {
+            diagnostics: this.createFailureDiagnostics(requestContext, {
+              httpStatus: 200,
+              providerType: null,
+              providerCode: null,
+              upstreamMessage: `Embedding 向量维度不匹配: expected ${this.config.dimensions}, got ${item.embedding.length}`,
+              category: 'incompatible_response',
+            }),
+          },
+        );
+      }
+    }
+  }
+
+  private createFailureDiagnostics(
+    requestContext: EmbeddingRequestContext,
+    details: {
+      httpStatus: number | null;
+      providerType: string | null;
+      providerCode: string | null;
+      upstreamMessage: string;
+      category?: EmbeddingFailureCategory;
+    },
+    err?: unknown,
+  ): EmbeddingFailureDiagnostics {
+    return {
+      stage: 'embed',
+      category:
+        details.category ??
+        this.classifyFailure(
+          details.httpStatus,
+          details.providerType,
+          details.providerCode,
+          details.upstreamMessage,
+          err,
+        ),
+      httpStatus: details.httpStatus,
+      providerType: details.providerType,
+      providerCode: details.providerCode,
+      upstreamMessage: details.upstreamMessage,
+      endpointHost: requestContext.endpointHost,
+      endpointPath: requestContext.endpointPath,
+      model: requestContext.model,
+      batchSize: requestContext.batchSize,
+      dimensions: requestContext.dimensions,
+      requestCount: requestContext.requestCount,
+    };
+  }
+
+  private classifyFailure(
+    httpStatus: number | null,
+    providerType: string | null,
+    providerCode: string | null,
+    upstreamMessage: string,
+    err?: unknown,
+  ): EmbeddingFailureCategory {
+    const signal = `${providerType ?? ''} ${providerCode ?? ''} ${upstreamMessage}`.toLowerCase();
+
+    if (
+      httpStatus === 401 ||
+      httpStatus === 403 ||
+      hasAnySignal(signal, ['auth', 'api_key', 'unauthorized', 'forbidden'])
+    ) {
+      return 'authentication';
+    }
+
+    if (httpStatus === 429 || hasAnySignal(signal, ['rate', 'quota', 'too many requests'])) {
+      return 'rate_limit';
+    }
+
+    if (
+      (httpStatus === 400 || httpStatus === 413) &&
+      hasAnySignal(signal, ['batch', 'too large', 'max input', 'payload too large'])
+    ) {
+      return 'batch_too_large';
+    }
+
+    if (hasAnySignal(signal, ['dimension'])) {
+      return 'dimension_mismatch';
+    }
+
+    if (this.isTimeoutError(err) || hasAnySignal(signal, ['timeout', 'timed out'])) {
+      return 'timeout';
+    }
+
+    if (
+      this.isNetworkError(err) ||
+      hasAnySignal(signal, ['econnreset', 'enotfound', 'fetch failed'])
+    ) {
+      return 'network';
+    }
+
+    if (
+      httpStatus === 200 &&
+      hasAnySignal(signal, ['缺少 data', '非数值向量', '越界的结果索引', '维度不匹配'])
+    ) {
+      return 'incompatible_response';
+    }
+
+    if (hasAnySignal(signal, ['response', 'payload', 'embedding'])) {
+      if (hasAnySignal(signal, ['缺少 data', '非数值向量', '越界的结果索引', '维度不匹配'])) {
+        return 'incompatible_response';
+      }
+    }
+
+    return 'unknown';
+  }
+
+  private getUpstreamMessage(err: unknown): string {
+    if (err instanceof EmbeddingFatalError) {
+      return err.diagnostics.upstreamMessage;
+    }
+    if (err instanceof Error) {
+      return err.message;
+    }
+    return String(err);
+  }
+
+  private formatEmbeddingErrorMessage(err: unknown): string {
+    const upstreamMessage = this.getUpstreamMessage(err);
+    return upstreamMessage.startsWith('Embedding API 错误:')
+      ? upstreamMessage
+      : `Embedding API 错误: ${upstreamMessage}`;
+  }
 }
 
 /**
@@ -626,4 +949,43 @@ export function resetEmbeddingClientForTests(): void {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parseEndpoint(baseUrl: string): { host: string; path: string } {
+  try {
+    const url = new URL(baseUrl);
+    return {
+      host: url.host,
+      path: url.pathname || '/',
+    };
+  } catch {
+    return {
+      host: '<invalid-url>',
+      path: '/',
+    };
+  }
+}
+
+function hasAnySignal(text: string, signals: string[]): boolean {
+  return signals.some((signal) => text.includes(signal));
+}
+
+function createFallbackDiagnostics(options: {
+  category?: EmbeddingFailureCategory;
+  upstreamMessage: string;
+}): EmbeddingFailureDiagnostics {
+  return {
+    stage: 'embed',
+    category: options.category ?? 'unknown',
+    httpStatus: null,
+    providerType: null,
+    providerCode: null,
+    upstreamMessage: options.upstreamMessage,
+    endpointHost: '<unknown>',
+    endpointPath: '/',
+    model: '<unknown>',
+    batchSize: 0,
+    dimensions: 0,
+    requestCount: 0,
+  };
 }

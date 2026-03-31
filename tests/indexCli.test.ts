@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { EmbeddingFatalError } from '../src/api/embedding.js';
 import {
   buildIndexPreview,
   buildIndexScopeLogLines,
@@ -435,6 +436,57 @@ describe('cli helpers', () => {
     expect(info).not.toHaveBeenCalledWith(expect.stringContaining('索引完成'));
     expect(info).not.toHaveBeenCalledWith(expect.stringContaining('总数:'));
     expect(error).toHaveBeenCalledWith('索引失败: 向量嵌入阶段失败: provider exploded');
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
+  it('prints a verdict first and then safe provider diagnostics for fatal embedding failures', async () => {
+    const info = vi.fn();
+    const error = vi.fn();
+    const exit = vi.fn();
+    const diagnosticsError = new EmbeddingFatalError('向量嵌入阶段失败: batch too large', {
+      diagnostics: {
+        stage: 'embed',
+        category: 'batch_too_large',
+        httpStatus: 400,
+        providerType: 'invalid_request_error',
+        providerCode: 'batch_limit_exceeded',
+        upstreamMessage: 'batch too large for provider',
+        endpointHost: 'api.example.com',
+        endpointPath: '/v1/embeddings',
+        model: 'text-embedding-3-large',
+        batchSize: 32,
+        dimensions: 1024,
+        requestCount: 27,
+      },
+    });
+
+    await runIndexCliCommand({
+      rootPath: '/repo',
+      yes: true,
+      isInteractive: false,
+      runIndexCommandFn: vi.fn().mockRejectedValue(diagnosticsError),
+      logger: { info, error },
+      exit,
+    });
+
+    expect(error).toHaveBeenNthCalledWith(1, '索引失败: 向量嵌入阶段失败: batch too large');
+    expect(error).toHaveBeenCalledWith('阶段: embed');
+    expect(error).toHaveBeenCalledWith('错误类别: batch_too_large');
+    expect(error).toHaveBeenCalledWith('HTTP 状态: 400');
+    expect(error).toHaveBeenCalledWith('Provider type: invalid_request_error');
+    expect(error).toHaveBeenCalledWith('Provider code: batch_limit_exceeded');
+    expect(error).toHaveBeenCalledWith('Provider message: batch too large for provider');
+    expect(error).toHaveBeenCalledWith('Endpoint: api.example.com/v1/embeddings');
+    expect(error).toHaveBeenCalledWith('Model: text-embedding-3-large');
+    expect(error).toHaveBeenCalledWith('Batch size: 32');
+    expect(error).toHaveBeenCalledWith('Dimensions: 1024');
+    expect(error).toHaveBeenCalledWith('Request items: 27');
+
+    const output = error.mock.calls.map(([line]) => line).join('\n');
+    expect(output).not.toContain('test-key');
+    expect(output).not.toContain('Bearer ');
+    expect(output).not.toContain('Authorization');
+    expect(output).not.toContain('api_key=secret');
     expect(exit).toHaveBeenCalledWith(1);
   });
 

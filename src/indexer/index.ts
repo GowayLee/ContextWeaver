@@ -215,9 +215,11 @@ export class Indexer {
         files.map((f) => f.path),
       );
 
-      const message = error.message || '未知错误';
-      throw new EmbeddingFatalError(`向量嵌入阶段失败: ${message}`, {
+      const diagnostics = err instanceof EmbeddingFatalError ? err.diagnostics : undefined;
+      const upstreamMessage = diagnostics?.upstreamMessage || error.message || '未知错误';
+      throw new EmbeddingFatalError(`向量嵌入阶段失败: ${upstreamMessage}`, {
         cause: err,
+        diagnostics,
       });
     }
 
