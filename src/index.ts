@@ -23,6 +23,43 @@ const pkg = JSON.parse(await fs.readFile(pkgPath, 'utf-8'));
 
 const cli = cac('contextweaver');
 
+export async function runIndexCliCommand(options: {
+  rootPath: string;
+  force?: boolean;
+  yes?: boolean;
+  isInteractive?: boolean;
+  runIndexCommandFn?: typeof runIndexCommand;
+  logger?: {
+    info: (message: string) => void;
+    error: (message: string) => void;
+  };
+  exit?: (code: number) => void;
+}): Promise<void> {
+  const startTime = Date.now();
+  const run = options.runIndexCommandFn ?? runIndexCommand;
+  const output = options.logger ?? logger;
+  const exit = options.exit ?? ((code: number) => process.exit(code));
+
+  try {
+    const stats = await run({
+      rootPath: options.rootPath,
+      force: options.force,
+      yes: options.yes,
+      isInteractive: options.isInteractive,
+    });
+
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+    output.info(`索引完成 (${duration}s)`);
+    output.info(
+      `总数:${stats.totalFiles} 新增:${stats.added} 修改:${stats.modified} 未变:${stats.unchanged} 删除:${stats.deleted} 跳过:${stats.skipped} 错误:${stats.errors}`,
+    );
+  } catch (err) {
+    const error = err as { message?: string };
+    output.error(`索引失败: ${error.message || '未知错误'}`);
+    exit(1);
+  }
+}
+
 // 自定义版本输出，只显示版本号
 if (process.argv.includes('-v') || process.argv.includes('--version')) {
   console.log(pkg.version);
@@ -97,26 +134,12 @@ cli
   .action(async (targetPath: string | undefined, options: { force?: boolean; yes?: boolean }) => {
     const rootPath = targetPath ? path.resolve(targetPath) : process.cwd();
 
-    const startTime = Date.now();
-
-    try {
-      const stats = await runIndexCommand({
-        rootPath,
-        force: options.force,
-        yes: options.yes,
-        isInteractive: Boolean(process.stdin.isTTY && process.stdout.isTTY),
-      });
-
-      const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-      logger.info(`索引完成 (${duration}s)`);
-      logger.info(
-        `总数:${stats.totalFiles} 新增:${stats.added} 修改:${stats.modified} 未变:${stats.unchanged} 删除:${stats.deleted} 跳过:${stats.skipped} 错误:${stats.errors}`,
-      );
-    } catch (err) {
-      const error = err as { message?: string; stack?: string };
-      logger.error({ err, stack: error.stack }, `索引失败: ${error.message}`);
-      process.exit(1);
-    }
+    await runIndexCliCommand({
+      rootPath,
+      force: options.force,
+      yes: options.yes,
+      isInteractive: Boolean(process.stdin.isTTY && process.stdout.isTTY),
+    });
   });
 
 cli
@@ -277,4 +300,7 @@ cli
   );
 
 cli.help();
-cli.parse();
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  cli.parse();
+}

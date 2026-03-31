@@ -13,7 +13,7 @@
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Fail-fast Exit** — Embedding 致命错误立即停机，退出码与输出与真实结果一致
+- [x] **Phase 1: Fail-fast Exit** — Embedding 致命错误立即停机，退出码与输出与真实结果一致
 - [ ] **Phase 2: Provider Diagnostics** — 嵌入失败输出包含 provider 类型、HTTP 状态、错误分类与安全诊断摘要
 - [ ] **Phase 3: Index Visibility** — 索引过程按阶段可见，跳过原因可追溯，最终摘要诚实反映真实结果
 - [ ] **Phase 4: State Consistency** — 失败后跨存储状态一致，search 只读健康快照
@@ -31,12 +31,12 @@ Decimal phases appear between their surrounding integers in numeric order.
 1. When embedding API returns a fatal error (4xx/5xx), `index` stops scheduling further embedding batches immediately and cancels in-flight work
 2. When `index` fails, CLI exits with non-zero code and prints no "索引完成" or success statistics
 3. When `index` succeeds, CLI exits with code 0 and prints success statistics; when it fails, the final output clearly states failure
-   **Plans**: TBD
+   **Plans**: 2 plans
 
 Plans:
 
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
+- [x] 01-01-PLAN.md — 为 embedding/indexer 建立 fail-fast 契约与回归测试
+- [x] 01-02-PLAN.md — 收紧 scanner/CLI 失败出口并抑制误导性成功输出
 
 ### Phase 2: Provider Diagnostics
 
@@ -111,10 +111,10 @@ Plans:
 **Execution Order:**
 Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
-| Phase                   | Plans Complete | Status      | Completed |
-| ----------------------- | -------------- | ----------- | --------- |
-| 1. Fail-fast Exit       | 0/?            | Not started | -         |
-| 2. Provider Diagnostics | 0/?            | Not started | -         |
-| 3. Index Visibility     | 0/?            | Not started | -         |
-| 4. State Consistency    | 0/?            | Not started | -         |
-| 5. Safe Recovery        | 0/?            | Not started | -         |
+| Phase                   | Plans Complete | Status      | Completed  |
+| ----------------------- | -------------- | ----------- | ---------- |
+| 1. Fail-fast Exit       | 2/2            | Completed   | 2026-04-01 |
+| 2. Provider Diagnostics | 0/?            | Not started | -          |
+| 3. Index Visibility     | 0/?            | Not started | -          |
+| 4. State Consistency    | 0/?            | Not started | -          |
+| 5. Safe Recovery        | 0/?            | Not started | -          |

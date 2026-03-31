@@ -253,27 +253,35 @@ export async function scan(rootPath: string, options: ScanOptions = {}): Promise
       const allToIndex = [...needsVectorIndex, ...healingFiles, ...deletedResults];
 
       if (allToIndex.length > 0) {
-        // 报告向量更新阶段开始（包含新增/修改/删除/自愈收敛）
-        const embeddingFileCount = allToIndex.filter(
-          (r) => (r.status === 'added' || r.status === 'modified') && r.chunks.length > 0,
-        ).length;
-        if (embeddingFileCount > 0) {
-          options.onProgress?.(45, 100, `正在生成向量嵌入... (${embeddingFileCount} 个文件)`);
-        } else {
-          options.onProgress?.(45, 100, '正在同步向量索引状态...');
-        }
+        try {
+          // 报告向量更新阶段开始（包含新增/修改/删除/自愈收敛）
+          const embeddingFileCount = allToIndex.filter(
+            (r) => (r.status === 'added' || r.status === 'modified') && r.chunks.length > 0,
+          ).length;
+          if (embeddingFileCount > 0) {
+            options.onProgress?.(45, 100, `正在生成向量嵌入... (${embeddingFileCount} 个文件)`);
+          } else {
+            options.onProgress?.(45, 100, '正在同步向量索引状态...');
+          }
 
-        // 传递进度回调给 indexer（embedding API 调用是真正的耗时操作）
-        const indexStats = await indexer.indexFiles(db, allToIndex, (completed, total) => {
-          // 将 embedding 批次进度映射到 45-99 区间（保留 100 给最终完成）
-          const progress = 45 + Math.floor((completed / total) * 54);
-          options.onProgress?.(progress, 100, `正在生成向量嵌入... (${completed}/${total} 批次)`);
-        });
-        stats.vectorIndex = {
-          indexed: indexStats.indexed,
-          deleted: indexStats.deleted,
-          errors: indexStats.errors,
-        };
+          // 传递进度回调给 indexer（embedding API 调用是真正的耗时操作）
+          const indexStats = await indexer.indexFiles(db, allToIndex, (completed, total) => {
+            // 将 embedding 批次进度映射到 45-99 区间（保留 100 给最终完成）
+            const progress = 45 + Math.floor((completed / total) * 54);
+            options.onProgress?.(progress, 100, `正在生成向量嵌入... (${completed}/${total} 批次)`);
+          });
+          stats.vectorIndex = {
+            indexed: indexStats.indexed,
+            deleted: indexStats.deleted,
+            errors: indexStats.errors,
+          };
+        } catch (err) {
+          const error = err as { message?: string };
+          if ((error.message || '').includes('向量嵌入阶段失败')) {
+            throw err;
+          }
+          throw new Error(`向量嵌入阶段失败: ${error.message || '未知错误'}`);
+        }
       }
     }
 

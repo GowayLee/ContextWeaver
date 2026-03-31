@@ -9,7 +9,7 @@
  */
 
 import type Database from 'better-sqlite3';
-import { type EmbeddingClient, getEmbeddingClient } from '../api/embedding.js';
+import { type EmbeddingClient, EmbeddingFatalError, getEmbeddingClient } from '../api/embedding.js';
 import type { ProcessedChunk } from '../chunking/types.js';
 import { batchUpdateVectorIndexHash, clearVectorIndexHash } from '../db/index.js';
 import type { ProcessResult } from '../scanner/processor.js';
@@ -140,10 +140,7 @@ export class Indexer {
     // 避免这些文件在下一轮被持续判定为“需要自愈”
     if (noChunkSettled.length > 0) {
       batchUpdateVectorIndexHash(db, noChunkSettled);
-      logger.debug(
-        { count: noChunkSettled.length },
-        '无可索引 chunk，标记向量索引状态为已收敛',
-      );
+      logger.debug({ count: noChunkSettled.length }, '无可索引 chunk，标记向量索引状态为已收敛');
     }
 
     // 批量处理需要索引的文件
@@ -217,11 +214,19 @@ export class Indexer {
         db,
         files.map((f) => f.path),
       );
-      return { success: 0, errors: files.length };
+
+      const message = error.message || '未知错误';
+      throw new EmbeddingFatalError(`向量嵌入阶段失败: ${message}`, {
+        cause: err,
+      });
     }
 
     // ===== 阶段 3: 组装所有 ChunkRecords =====
-    const filesToUpsert: Array<{ path: string; hash: string; records: ChunkRecord[] }> = [];
+    const filesToUpsert: Array<{
+      path: string;
+      hash: string;
+      records: ChunkRecord[];
+    }> = [];
     const allFtsChunks: Array<{
       chunkId: string;
       filePath: string;

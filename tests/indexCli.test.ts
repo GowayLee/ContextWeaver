@@ -15,6 +15,7 @@ import {
   runCleanIndexes,
   runIndexCommand,
 } from '../src/cli.js';
+import { runIndexCliCommand } from '../src/index.js';
 import { isIndexedProjectConfirmed, listIndexedProjects } from '../src/indexRegistry.js';
 
 const tempDirs: string[] = [];
@@ -181,6 +182,7 @@ describe('cli helpers', () => {
           projectPath: '/missing/repo',
           pathBirthtimeMs: 1,
           lastIndexedAt: '2026-03-27T00:00:00.000Z',
+          confirmedAt: null,
         },
       ],
       deleteDirectory: async (projectId) => {
@@ -206,6 +208,7 @@ describe('cli helpers', () => {
           projectPath: '/missing/repo',
           pathBirthtimeMs: 1,
           lastIndexedAt: '2026-03-27T00:00:00.000Z',
+          confirmedAt: null,
         },
       ],
       confirmDelete: async () => false,
@@ -235,12 +238,14 @@ describe('cli helpers', () => {
           projectPath: '/missing/repo',
           pathBirthtimeMs: 1,
           lastIndexedAt: '2026-03-27T00:00:00.000Z',
+          confirmedAt: null,
         },
         {
           projectId: 'missing12345',
           projectPath: '/missing/repo-2',
           pathBirthtimeMs: 1,
           lastIndexedAt: '2026-03-27T00:00:00.000Z',
+          confirmedAt: null,
         },
       ],
       confirmDelete: async () => true,
@@ -409,6 +414,48 @@ describe('cli helpers', () => {
     const projects = await listIndexedProjects();
     expect(projects).toHaveLength(1);
     expect(await isIndexedProjectConfirmed(projects[0]!.projectId)).toBe(true);
+  });
+
+  it('prints a failure verdict with stage context and no success summary on fatal embedding failure', async () => {
+    const info = vi.fn();
+    const error = vi.fn();
+    const exit = vi.fn();
+
+    await runIndexCliCommand({
+      rootPath: '/repo',
+      yes: true,
+      isInteractive: false,
+      runIndexCommandFn: vi
+        .fn()
+        .mockRejectedValue(new Error('向量嵌入阶段失败: provider exploded')),
+      logger: { info, error },
+      exit,
+    });
+
+    expect(info).not.toHaveBeenCalledWith(expect.stringContaining('索引完成'));
+    expect(info).not.toHaveBeenCalledWith(expect.stringContaining('总数:'));
+    expect(error).toHaveBeenCalledWith('索引失败: 向量嵌入阶段失败: provider exploded');
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
+  it('keeps success-only completion output on successful indexing runs', async () => {
+    const info = vi.fn();
+    const error = vi.fn();
+    const exit = vi.fn();
+
+    await runIndexCliCommand({
+      rootPath: '/repo',
+      yes: true,
+      isInteractive: false,
+      runIndexCommandFn: vi.fn().mockResolvedValue(mockStats),
+      logger: { info, error },
+      exit,
+    });
+
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('索引完成 ('));
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('总数:3 新增:3'));
+    expect(error).not.toHaveBeenCalled();
+    expect(exit).not.toHaveBeenCalled();
   });
 
   it('rejects local search when the repo has never completed confirmed indexing', async () => {

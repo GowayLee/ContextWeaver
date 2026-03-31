@@ -21,8 +21,8 @@ Requirements for this milestone focus on making the existing `index` command hon
 
 ### Safety
 
-- [ ] **SAFE-01**: User can rely on `index` to stop scheduling further embedding work immediately after a fatal embedding error is detected
-- [ ] **SAFE-02**: User never sees misleading success messages or success statistics after a fatal indexing failure
+- [x] **SAFE-01**: User can rely on `index` to stop scheduling further embedding work immediately after a fatal embedding error is detected
+- [x] **SAFE-02**: User never sees misleading success messages or success statistics after a fatal indexing failure
 - [ ] **SAFE-03**: User can trust that indexing state remains consistent across SQLite metadata, FTS records, LanceDB vectors, and published index status after a fatal failure
 - [ ] **SAFE-04**: User can rely on search-side consumers to read only the last healthy published index snapshot after a failed indexing run
 
@@ -64,8 +64,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase                         | Status  |
 | ----------- | ----------------------------- | ------- |
-| SAFE-01     | Phase 1: Fail-fast Exit       | Pending |
-| SAFE-02     | Phase 1: Fail-fast Exit       | Pending |
+| SAFE-01     | Phase 1: Fail-fast Exit       | Done    |
+| SAFE-02     | Phase 1: Fail-fast Exit       | Done    |
 | DIAG-01     | Phase 2: Provider Diagnostics | Pending |
 | DIAG-02     | Phase 2: Provider Diagnostics | Pending |
 | DIAG-03     | Phase 2: Provider Diagnostics | Pending |
@@ -86,4 +86,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 ---
 
 _Requirements defined: 2026-03-31_
-_Last updated: 2026-03-31 after roadmap creation_
+_Last updated: 2026-04-01 after Phase 1 execution_

@@ -55,6 +55,20 @@ export interface EmbeddingResult {
   index: number;
 }
 
+export class EmbeddingFatalError extends Error {
+  readonly stage = 'embed';
+
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = 'EmbeddingFatalError';
+  }
+}
+
+interface EmbeddingSession {
+  fatalError: EmbeddingFatalError | null;
+  controllers: Set<AbortController>;
+}
+
 /**
  * 进度追踪器
  * 定时输出进度，避免每个批次都打印日志
@@ -254,7 +268,7 @@ class RateLimitController {
     );
 
     // 创建暂停 Promise
-    let resumeResolve: () => void = () => { };
+    let resumeResolve: () => void = () => {};
     this.pausePromise = new Promise<void>((resolve) => {
       resumeResolve = resolve;
     });
@@ -349,11 +363,15 @@ export class EmbeddingClient {
 
     // 创建进度追踪器（传入外部回调）
     const progress = new ProgressTracker(batches.length, onProgress);
+    const session: EmbeddingSession = {
+      fatalError: null,
+      controllers: new Set(),
+    };
 
     // 使用速率限制控制器处理各批次
     const batchResults = await Promise.all(
       batches.map((batch, batchIndex) =>
-        this.processWithRateLimit(batch, batchIndex * batchSize, progress),
+        this.processWithRateLimit(batch, batchIndex * batchSize, progress, session),
       ),
     );
 
@@ -372,6 +390,7 @@ export class EmbeddingClient {
     texts: string[],
     startIndex: number,
     progress: ProgressTracker,
+    session: EmbeddingSession,
   ): Promise<EmbeddingResult[]> {
     const MAX_NETWORK_RETRIES = 3;
     const INITIAL_RETRY_DELAY_MS = 1000;
@@ -379,14 +398,34 @@ export class EmbeddingClient {
     let networkRetries = 0;
 
     while (true) {
+      if (session.fatalError) {
+        throw session.fatalError;
+      }
+
       // 获取执行槽位（可能等待）
       await this.rateLimiter.acquire();
 
+      if (session.fatalError) {
+        this.rateLimiter.releaseFailure();
+        throw session.fatalError;
+      }
+
       try {
-        const result = await this.processBatch(texts, startIndex, progress);
+        const result = await this.processBatch(texts, startIndex, progress, session);
+
+        if (session.fatalError) {
+          this.rateLimiter.releaseFailure();
+          throw session.fatalError;
+        }
+
         this.rateLimiter.releaseSuccess();
         return result;
       } catch (err) {
+        if (session.fatalError) {
+          this.rateLimiter.releaseFailure();
+          throw session.fatalError;
+        }
+
         const error = err as { message?: string; code?: string };
         const errorMessage = error.message || '';
         const isRateLimited = errorMessage.includes('429') || errorMessage.includes('rate');
@@ -424,7 +463,7 @@ export class EmbeddingClient {
             logger.error({ error: errorMessage, retries: networkRetries }, '网络错误重试次数耗尽');
           }
 
-          throw err;
+          throw this.failSession(session, err);
         }
       }
     }
@@ -481,39 +520,76 @@ export class EmbeddingClient {
     texts: string[],
     startIndex: number,
     progress: ProgressTracker,
+    session: EmbeddingSession,
   ): Promise<EmbeddingResult[]> {
+    if (session.fatalError) {
+      throw session.fatalError;
+    }
+
     const requestBody: EmbeddingRequest = {
       model: this.config.model,
       input: texts,
       encoding_format: 'float',
     };
 
-    const response = await fetch(this.config.baseUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.config.apiKey}`,
-      },
-      body: JSON.stringify(requestBody),
-    });
+    const controller = new AbortController();
+    session.controllers.add(controller);
 
-    const data = (await response.json()) as EmbeddingResponse & EmbeddingErrorResponse;
+    try {
+      const response = await fetch(this.config.baseUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.config.apiKey}`,
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
 
-    if (!response.ok || data.error) {
-      const errorMsg = data.error?.message || `HTTP ${response.status}`;
-      throw new Error(`Embedding API 错误: ${errorMsg}`);
+      const data = (await response.json()) as EmbeddingResponse & EmbeddingErrorResponse;
+
+      if (!response.ok || data.error) {
+        const errorMsg = data.error?.message || `HTTP ${response.status}`;
+        throw new Error(`Embedding API 错误: ${errorMsg}`);
+      }
+
+      if (session.fatalError) {
+        throw session.fatalError;
+      }
+
+      const results: EmbeddingResult[] = data.data.map((item) => ({
+        text: texts[item.index],
+        embedding: item.embedding,
+        index: startIndex + item.index,
+      }));
+
+      if (session.fatalError) {
+        throw session.fatalError;
+      }
+
+      // 记录批次完成（进度追踪器会定时输出）
+      progress.recordBatch(data.usage?.total_tokens || 0);
+
+      return results;
+    } finally {
+      session.controllers.delete(controller);
+    }
+  }
+
+  private failSession(session: EmbeddingSession, err: unknown): EmbeddingFatalError {
+    if (session.fatalError) {
+      return session.fatalError;
     }
 
-    const results: EmbeddingResult[] = data.data.map((item) => ({
-      text: texts[item.index],
-      embedding: item.embedding,
-      index: startIndex + item.index,
-    }));
+    const message = err instanceof Error ? err.message : String(err);
+    const fatalError = new EmbeddingFatalError(message, { cause: err });
+    session.fatalError = fatalError;
 
-    // 记录批次完成（进度追踪器会定时输出）
-    progress.recordBatch(data.usage?.total_tokens || 0);
+    for (const controller of session.controllers) {
+      controller.abort();
+    }
 
-    return results;
+    return fatalError;
   }
 
   /**
@@ -541,6 +617,11 @@ export function getEmbeddingClient(): EmbeddingClient {
     defaultClient = new EmbeddingClient();
   }
   return defaultClient;
+}
+
+export function resetEmbeddingClientForTests(): void {
+  defaultClient = null;
+  globalRateLimitController = null;
 }
 
 function sleep(ms: number): Promise<void> {
