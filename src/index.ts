@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import cac from 'cac';
+import { type EmbeddingFailureDiagnostics, EmbeddingFatalError } from './api/embedding.js';
 import {
   initProjectConfigCommand,
   installBundledSkills,
@@ -22,6 +23,60 @@ const pkgPath = path.resolve(__dirname, '../package.json');
 const pkg = JSON.parse(await fs.readFile(pkgPath, 'utf-8'));
 
 const cli = cac('contextweaver');
+
+function formatEmbeddingFailureDiagnostics(error: unknown): string[] | null {
+  if (!(error instanceof EmbeddingFatalError)) {
+    return null;
+  }
+
+  const diagnostics = error.diagnostics;
+  const endpointPath = sanitizeEndpointPath(diagnostics.endpointPath);
+
+  return [
+    `阶段: ${formatUnknownValue(diagnostics.stage)}`,
+    `错误类别: ${formatUnknownValue(diagnostics.category)}`,
+    `HTTP 状态: ${formatUnknownValue(diagnostics.httpStatus)}`,
+    `Provider type: ${formatNoneValue(diagnostics.providerType)}`,
+    `Provider code: ${formatNoneValue(diagnostics.providerCode)}`,
+    `Provider message: ${formatUnknownValue(diagnostics.upstreamMessage)}`,
+    `Endpoint: ${formatEndpoint(diagnostics.endpointHost, endpointPath)}`,
+    `Model: ${formatUnknownValue(diagnostics.model)}`,
+    `Batch size: ${formatUnknownValue(diagnostics.batchSize)}`,
+    `Dimensions: ${formatUnknownValue(diagnostics.dimensions)}`,
+    `Request items: ${formatUnknownValue(diagnostics.requestCount)}`,
+  ];
+}
+
+function sanitizeEndpointPath(endpointPath: string): string {
+  const safePath = endpointPath.split('?')[0] || '/';
+  return safePath.startsWith('/') ? safePath : `/${safePath}`;
+}
+
+function formatEndpoint(endpointHost: string, endpointPath: string): string {
+  const host = formatUnknownValue(endpointHost);
+  const path = formatUnknownValue(endpointPath);
+  return host === '<unknown>' ? '<unknown>' : `${host}${path}`;
+}
+
+function formatUnknownValue(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) {
+    return '<unknown>';
+  }
+
+  if (typeof value === 'string') {
+    return value.trim() === '' ? '<unknown>' : value;
+  }
+
+  return String(value);
+}
+
+function formatNoneValue(value: string | null | undefined): string {
+  if (value === null || value === undefined || value.trim() === '') {
+    return '<none>';
+  }
+
+  return value;
+}
 
 export async function runIndexCliCommand(options: {
   rootPath: string;
@@ -56,6 +111,12 @@ export async function runIndexCliCommand(options: {
   } catch (err) {
     const error = err as { message?: string };
     output.error(`索引失败: ${error.message || '未知错误'}`);
+    const diagnosticsLines = formatEmbeddingFailureDiagnostics(err);
+    if (diagnosticsLines) {
+      for (const line of diagnosticsLines) {
+        output.error(line);
+      }
+    }
     exit(1);
   }
 }

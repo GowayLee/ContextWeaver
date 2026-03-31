@@ -10,7 +10,7 @@ Requirements for this milestone focus on making the existing `index` command hon
 ### Diagnostics
 
 - [x] **DIAG-01**: User can see provider-aware embedding failure details that include the failing stage, provider type, HTTP status, and upstream error summary when `index` fails
-- [ ] **DIAG-02**: User can see a safe diagnostic request summary for embedding failures, including model name, batch size, dimensions, and endpoint host without exposing secrets
+- [x] **DIAG-02**: User can see a safe diagnostic request summary for embedding failures, including model name, batch size, dimensions, and endpoint host without exposing secrets
 - [x] **DIAG-03**: User can distinguish common embedding failure categories such as authentication, rate limit, batch-too-large, dimension mismatch, timeout, network failure, and incompatible response format
 
 ### Visibility
@@ -67,7 +67,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SAFE-01     | Phase 1: Fail-fast Exit       | Done    |
 | SAFE-02     | Phase 1: Fail-fast Exit       | Done    |
 | DIAG-01     | Phase 2: Provider Diagnostics | Complete |
-| DIAG-02     | Phase 2: Provider Diagnostics | Pending |
+| DIAG-02     | Phase 2: Provider Diagnostics | Complete |
 | DIAG-03     | Phase 2: Provider Diagnostics | Complete |
 | VIS-01      | Phase 3: Index Visibility     | Pending |
 | VIS-02      | Phase 3: Index Visibility     | Pending |

@@ -14,7 +14,7 @@
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Fail-fast Exit** — Embedding 致命错误立即停机，退出码与输出与真实结果一致
-- [ ] **Phase 2: Provider Diagnostics** — 嵌入失败输出包含 provider 类型、HTTP 状态、错误分类与安全诊断摘要
+- [x] **Phase 2: Provider Diagnostics** — 嵌入失败输出包含 provider 类型、HTTP 状态、错误分类与安全诊断摘要 (completed 2026-03-31)
 - [ ] **Phase 3: Index Visibility** — 索引过程按阶段可见，跳过原因可追溯，最终摘要诚实反映真实结果
 - [ ] **Phase 4: State Consistency** — 失败后跨存储状态一致，search 只读健康快照
 - [ ] **Phase 5: Safe Recovery** — 失败后可安全恢复，兼容现有 `index --force`
@@ -53,7 +53,19 @@ Plans:
 Plans:
 
 - [x] 02-01-PLAN.md — 为 embedding/indexer 建立 provider diagnostics 契约与分类回归测试
-- [ ] 02-02-PLAN.md — 在顶层 CLI 渲染安全的双层 provider 诊断输出
+- [x] 02-02-PLAN.md — 在顶层 CLI 渲染安全的双层 provider 诊断输出
+
+### Phase 02.1: 我检查了一下现在的版本，出现重大问题：运行“contextweaver”或“cw”命令没有任何输出 (INSERTED)
+
+**Goal:** `contextweaver` / `cw` 的共享 CLI 入口在无参数和帮助触发时稳定显示标准 help，且代表性子命令继续通过同一入口产生可见输出
+**Requirements**: TBD
+**Depends on:** Phase 2
+**Plans:** 1/2 plans executed
+
+Plans:
+
+- [x] 02.1-01-PLAN.md — 锁定 CLI 入口无参数/help/别名/代表性派发的 smoke 回归
+- [ ] 02.1-02-PLAN.md — 在共享入口修复默认 help 与主模块 parse 契约
 
 ### Phase 3: Index Visibility
 
@@ -109,12 +121,13 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
+Phases execute in numeric order: 1 → 2 → 2.1 → 3 → 4 → 5
 
 | Phase                   | Plans Complete | Status      | Completed  |
 | ----------------------- | -------------- | ----------- | ---------- |
 | 1. Fail-fast Exit       | 2/2            | Completed   | 2026-04-01 |
-| 2. Provider Diagnostics | 0/?            | Not started | -          |
+| 2. Provider Diagnostics | 2/2            | Complete    | 2026-03-31 |
+| 2.1. contextweaver-cw   | 0/2            | Planned     | -          |
 | 3. Index Visibility     | 0/?            | Not started | -          |
 | 4. State Consistency    | 0/?            | Not started | -          |
 | 5. Safe Recovery        | 0/?            | Not started | -          |

@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-03-31T17:39:57.962Z"
-last_activity: 2026-03-31
+status: planning
+stopped_at: Completed 02.1-01-PLAN.md
+last_updated: "2026-04-01T01:40:41.891Z"
+last_activity: 2026-04-01
 progress:
-  total_phases: 5
-  completed_phases: 1
-  total_plans: 4
-  completed_plans: 3
-  percent: 20
+  total_phases: 6
+  completed_phases: 2
+  total_plans: 6
+  completed_plans: 5
+  percent: 83
 ---
 
 # Project State
@@ -21,38 +21,41 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-31)
 
 **Core value:** Agent 能稳定、可信地从本地代码库中获得可用的检索结果与上下文证据，而不是在索引或搜索主链路中遇到误导性成功状态或难以诊断的失败。
-**Current focus:** Phase 02 — provider-diagnostics
+**Current focus:** Phase 02.1 — contextweaver-cw (urgent insertion, not planned)
 
 ## Current Position
 
-Phase: 02 (provider-diagnostics) — EXECUTING
-Plan: 2 of 2
-Status: Ready to execute
-Last activity: 2026-03-31
+Phase: 02.1
+Plan: 02
+Status: Plan 01 completed — ready for Plan 02 execution
+Last activity: 2026-04-01
 
-Progress: [██░░░░░░░░] 20%
+Progress: [████████░░] 83%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 2
-- Average duration: 25 min
-- Total execution time: 0.8 hours
+- Total plans completed: 5
+- Average duration: 15 min
+- Total execution time: 1.25 hours
 
 **By Phase:**
 
 | Phase | Plans | Total  | Avg/Plan |
 | ----- | ----- | ------ | -------- |
 | 1     | 2     | 50 min | 25 min   |
+| 2     | 2     | 13 min | 7 min    |
 
 **Recent Trend:**
 
-- Last 5 plans: 01-01, 01-02
+- Last 5 plans: 01-02, 02-01, 02-02, 02.1-01
 - Trend: Stable
 
 _Updated after each plan completion_
 | Phase 02 P01 | 11 min | 2 tasks | 4 files |
+| Phase 02 P02 | 2 min | 2 tasks | 2 files |
+| Phase 02.1 P01 | 15 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -67,10 +70,19 @@ Recent decisions affecting current work:
 - [Phase 02]: 在 API 层生成 EmbeddingFailureDiagnostics，避免 CLI 再次猜测上游错误语义
 - [Phase 02]: 仅对高置信信号映射标准类别，其他情况保留 unknown 并展示 provider 原始字段
 - [Phase 02]: indexer 重抛保留 向量嵌入阶段失败 上下文，但直接复用 upstream diagnostics
+- [Phase 02]: 在 src/index.ts 顶层边界渲染 diagnostics，而不是在 CLI 层重新分类或重建 provider 错误语义
+- [Phase 02]: diagnostics helper 固定输出字段顺序，并对缺失值统一显示 <unknown> 或 <none>
+- [Phase 02]: Endpoint 默认只显示 host + path，并额外剥离 query string 作为终端输出安全兜底
+- [Phase 02.1]: 直接针对 dist/index.js 跑子进程 smoke test，避免只验证源码层假设。
+- [Phase 02.1]: 用临时包装器模拟 contextweaver 与 cw 两个发布别名，锁定共享入口的一致性。
+
+### Roadmap Evolution
+
+- Phase 02.1 inserted after Phase 2: 我检查了一下现在的版本，出现重大问题：运行“contextweaver”或“cw”命令没有任何输出 (URGENT)
 
 ### Pending Todos
 
-- Phase 2 需要补 provider 类型、HTTP 状态与安全诊断摘要
+- None
 
 ### Blockers/Concerns
 
@@ -79,6 +91,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-03-31T17:39:57.960Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-04-01T01:40:41.887Z
+Stopped at: Completed 02.1-01-PLAN.md
 Resume file: None
