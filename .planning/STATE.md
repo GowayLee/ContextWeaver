@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: planning
-stopped_at: Completed 02.1-01-PLAN.md
-last_updated: "2026-04-01T01:40:41.891Z"
+status: completed
+stopped_at: Phase 3 context gathered
+last_updated: "2026-04-01T02:05:16.839Z"
 last_activity: 2026-04-01
 progress:
   total_phases: 6
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 6
-  completed_plans: 5
-  percent: 83
+  completed_plans: 6
+  percent: 100
 ---
 
 # Project State
@@ -27,18 +27,18 @@ See: .planning/PROJECT.md (updated 2026-03-31)
 
 Phase: 02.1
 Plan: 02
-Status: Plan 01 completed — ready for Plan 02 execution
+Status: Plan 02 completed — Phase 02.1 complete
 Last activity: 2026-04-01
 
-Progress: [████████░░] 83%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 5
-- Average duration: 15 min
-- Total execution time: 1.25 hours
+- Total plans completed: 6
+- Average duration: 13 min
+- Total execution time: 1.33 hours
 
 **By Phase:**
 
@@ -46,16 +46,18 @@ Progress: [████████░░] 83%
 | ----- | ----- | ------ | -------- |
 | 1     | 2     | 50 min | 25 min   |
 | 2     | 2     | 13 min | 7 min    |
+| 2.1   | 2     | 20 min | 10 min   |
 
 **Recent Trend:**
 
-- Last 5 plans: 01-02, 02-01, 02-02, 02.1-01
+- Last 5 plans: 01-02, 02-01, 02-02, 02.1-01, 02.1-02
 - Trend: Stable
 
 _Updated after each plan completion_
 | Phase 02 P01 | 11 min | 2 tasks | 4 files |
 | Phase 02 P02 | 2 min | 2 tasks | 2 files |
 | Phase 02.1 P01 | 15 | 2 tasks | 1 files |
+| Phase 02.1 P02 | 5 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -75,6 +77,8 @@ Recent decisions affecting current work:
 - [Phase 02]: Endpoint 默认只显示 host + path，并额外剥离 query string 作为终端输出安全兜底
 - [Phase 02.1]: 直接针对 dist/index.js 跑子进程 smoke test，避免只验证源码层假设。
 - [Phase 02.1]: 用临时包装器模拟 contextweaver 与 cw 两个发布别名，锁定共享入口的一致性。
+- [Phase 02.1]: 在 src/index.ts 入口边界统一把 [] 与 help 归一化为 --help，而不是给单个命令打补丁。
+- [Phase 02.1]: 主模块分支改为调用 runCli，并显式把规范化后的 argv 传给 cli.parse(...)。
 
 ### Roadmap Evolution
 
@@ -91,6 +95,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-01T01:40:41.887Z
-Stopped at: Completed 02.1-01-PLAN.md
-Resume file: None
+Last session: 2026-04-01T02:05:16.835Z
+Stopped at: Phase 3 context gathered
+Resume file: .planning/phases/03-index-visibility/03-CONTEXT.md

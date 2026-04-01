@@ -60,12 +60,12 @@ Plans:
 **Goal:** `contextweaver` / `cw` 的共享 CLI 入口在无参数和帮助触发时稳定显示标准 help，且代表性子命令继续通过同一入口产生可见输出
 **Requirements**: TBD
 **Depends on:** Phase 2
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 
 - [x] 02.1-01-PLAN.md — 锁定 CLI 入口无参数/help/别名/代表性派发的 smoke 回归
-- [ ] 02.1-02-PLAN.md — 在共享入口修复默认 help 与主模块 parse 契约
+- [x] 02.1-02-PLAN.md — 在共享入口修复默认 help 与主模块 parse 契约
 
 ### Phase 3: Index Visibility
 
@@ -127,7 +127,7 @@ Phases execute in numeric order: 1 → 2 → 2.1 → 3 → 4 → 5
 | ----------------------- | -------------- | ----------- | ---------- |
 | 1. Fail-fast Exit       | 2/2            | Completed   | 2026-04-01 |
 | 2. Provider Diagnostics | 2/2            | Complete    | 2026-03-31 |
-| 2.1. contextweaver-cw   | 0/2            | Planned     | -          |
+| 2.1. contextweaver-cw   | 2/2            | Complete    | 2026-04-01 |
 | 3. Index Visibility     | 0/?            | Not started | -          |
 | 4. State Consistency    | 0/?            | Not started | -          |
 | 5. Safe Recovery        | 0/?            | Not started | -          |

@@ -374,6 +374,13 @@ cli
 
 cli.help();
 
+export function runCli(argv = process.argv.slice(2), invokedPath = process.argv[1]): void {
+  const normalizedArgv = normalizeCliArgs(argv);
+  const entryPath = invokedPath ?? 'contextweaver';
+
+  cli.parse([process.execPath, entryPath, ...normalizedArgv]);
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  cli.parse([process.execPath, process.argv[1], ...normalizeCliArgs(process.argv.slice(2))]);
+  runCli();
 }
