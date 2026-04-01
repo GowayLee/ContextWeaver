@@ -2,7 +2,7 @@
 // 配置必须最先加载（包含环境变量初始化）
 import './config.js';
 
-import { promises as fs } from 'node:fs';
+import { promises as fs, realpathSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -474,6 +474,24 @@ export function runCli(argv = process.argv.slice(2), invokedPath = process.argv[
   cli.parse([process.execPath, entryPath, ...normalizedArgv]);
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+function resolveExecutableEntry(entryPath: string): string {
+  try {
+    return realpathSync(entryPath);
+  } catch {
+    return path.resolve(entryPath);
+  }
+}
+
+function isMainModule(invokedPath = process.argv[1]): boolean {
+  if (!invokedPath) {
+    return false;
+  }
+
+  return (
+    resolveExecutableEntry(invokedPath) === resolveExecutableEntry(fileURLToPath(import.meta.url))
+  );
+}
+
+if (isMainModule()) {
   runCli();
 }

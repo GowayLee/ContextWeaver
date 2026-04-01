@@ -83,14 +83,18 @@ function runAlias(wrapperPath: string, args: string[]): EntryResult {
   };
 }
 
+function expectHelpSurface(result: EntryResult): void {
+  expect(result.status).toBe(0);
+  expect(result.output).not.toBe('');
+  expect(result.output).toContain('Usage:');
+  expect(result.output).toContain('Commands:');
+}
+
 describe('CLI entry smoke tests', () => {
   it('shows help when invoked without arguments', () => {
     const result = runEntry([]);
 
-    expect(result.status).toBe(0);
-    expect(result.output).not.toBe('');
-    expect(result.output).toContain('Usage:');
-    expect(result.output).toContain('Commands:');
+    expectHelpSurface(result);
     expect(result.output).toContain('contextweaver');
   });
 
@@ -98,10 +102,7 @@ describe('CLI entry smoke tests', () => {
     for (const args of [['help'], ['-h'], ['--help']]) {
       const result = runEntry(args);
 
-      expect(result.status).toBe(0);
-      expect(result.output).not.toBe('');
-      expect(result.output).toContain('Usage:');
-      expect(result.output).toContain('Commands:');
+      expectHelpSurface(result);
       expect(result.output).toContain('Options:');
     }
   });
@@ -138,6 +139,23 @@ describe('CLI entry smoke tests', () => {
     }
   });
 
+  it('keeps direct dist execution and both published wrappers aligned for shared help entrypoints', async () => {
+    const contextweaverPath = await createAliasWrapper('contextweaver');
+    const cwPath = await createAliasWrapper('cw');
+
+    for (const args of [[], ['--help']]) {
+      const directResult = runEntry(args);
+      const contextweaverResult = runAlias(contextweaverPath, args);
+      const cwResult = runAlias(cwPath, args);
+
+      expectHelpSurface(directResult);
+      expectHelpSurface(contextweaverResult);
+      expectHelpSurface(cwResult);
+      expect(directResult.output).toBe(contextweaverResult.output);
+      expect(contextweaverResult.output).toBe(cwResult.output);
+    }
+  });
+
   it('shows help when launched through published symlink aliases without arguments', async () => {
     const contextweaverPath = await createAliasSymlink('contextweaver');
     const cwPath = await createAliasSymlink('cw');
@@ -145,12 +163,8 @@ describe('CLI entry smoke tests', () => {
     const contextweaverResult = runAlias(contextweaverPath, []);
     const cwResult = runAlias(cwPath, []);
 
-    expect(contextweaverResult.status).toBe(0);
-    expect(cwResult.status).toBe(0);
-    expect(contextweaverResult.output).not.toBe('');
-    expect(cwResult.output).not.toBe('');
-    expect(contextweaverResult.output).toContain('Usage:');
-    expect(cwResult.output).toContain('Usage:');
+    expectHelpSurface(contextweaverResult);
+    expectHelpSurface(cwResult);
     expect(contextweaverResult.output).toBe(cwResult.output);
   });
 
