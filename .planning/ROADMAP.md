@@ -82,7 +82,7 @@ Plans:
 Plans:
 
 - [x] 03-01-PLAN.md — 建立 scanner 可见性契约、跳过原因分桶和失败 partial stats
-- [ ] 03-02-PLAN.md — 通过现有 progress 回调链输出阶段化索引进度
+- [x] 03-02-PLAN.md — 通过现有 progress 回调链输出阶段化索引进度
 - [ ] 03-03-PLAN.md — 在 CLI 边界渲染诚实的成功/失败摘要和边界场景结论
 
 ### Phase 4: State Consistency
@@ -129,6 +129,6 @@ Phases execute in numeric order: 1 → 2 → 2.1 → 3 → 4 → 5
 | 1. Fail-fast Exit       | 2/2            | Completed   | 2026-04-01 |
 | 2. Provider Diagnostics | 2/2            | Complete    | 2026-03-31 |
 | 2.1. contextweaver-cw   | 2/2            | Complete    | 2026-04-01 |
-| 3. Index Visibility     | 1/3            | In Progress | -          |
+| 3. Index Visibility     | 2/3            | In Progress | -          |
 | 4. State Consistency    | 0/?            | Not started | -          |
 | 5. Safe Recovery        | 0/?            | Not started | -          |

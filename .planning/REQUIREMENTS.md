@@ -15,7 +15,7 @@ Requirements for this milestone focus on making the existing `index` command hon
 
 ### Visibility
 
-- [ ] **VIS-01**: User can see `index` progress by major stages, including crawl, process, chunk, embed, and persist
+- [x] **VIS-01**: User can see `index` progress by major stages, including crawl, process, chunk, embed, and persist
 - [x] **VIS-02**: User can see how many files were skipped during indexing and the reason distribution for those skipped files
 - [x] **VIS-03**: User can see a final indexing summary whose success or failure state matches the actual exit code and indexing outcome
 
@@ -69,7 +69,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DIAG-01     | Phase 2: Provider Diagnostics | Complete |
 | DIAG-02     | Phase 2: Provider Diagnostics | Complete |
 | DIAG-03     | Phase 2: Provider Diagnostics | Complete |
-| VIS-01      | Phase 3: Index Visibility     | Pending |
+| VIS-01      | Phase 3: Index Visibility     | Complete |
 | VIS-02      | Phase 3: Index Visibility     | Complete |
 | VIS-03      | Phase 3: Index Visibility     | Complete |
 | SAFE-03     | Phase 4: State Consistency    | Pending |

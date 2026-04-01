@@ -424,7 +424,7 @@ export async function runIndexCommand(options: {
   }
 
   const { withLock } = await import('./utils/lock.js');
-  let lastLoggedPercent = 0;
+  let lastProgressMessage: string | undefined;
   const confirmedAt = new Date().toISOString();
   const stats = await withLock(
     identity.projectId,
@@ -434,14 +434,16 @@ export async function runIndexCommand(options: {
         force: options.force,
         precomputedFilePaths: preview.matchedFilePaths,
         onProgress: (current, total, message) => {
-          if (total === undefined) {
+          if (!message) {
             return;
           }
-          const percent = Math.floor((current / total) * 100);
-          if (percent >= lastLoggedPercent + 30 && percent < 100) {
-            logLine(`索引进度: ${percent}% - ${message || ''}`);
-            lastLoggedPercent = Math.floor(percent / 30) * 30;
+
+          if (message === lastProgressMessage) {
+            return;
           }
+
+          lastProgressMessage = message;
+          logLine(message);
         },
       }),
     10 * 60 * 1000,

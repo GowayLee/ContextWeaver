@@ -91,6 +91,18 @@ export interface ScanOptions {
   precomputedFilePaths?: string[];
 }
 
+function reportStageProgress(
+  onProgress: ProgressCallback | undefined,
+  options: {
+    current: number;
+    total?: number;
+    stage: IndexStage;
+    detail: string;
+  },
+): void {
+  onProgress?.(options.current, options.total, `阶段 ${options.stage}: ${options.detail}`);
+}
+
 function incrementSkipBucket(
   skippedByReason: Partial<Record<SkipReasonBucket, number>>,
   bucket?: SkipReasonBucket,
@@ -218,6 +230,12 @@ export async function scan(rootPath: string, options: ScanOptions = {}): Promise
     } catch (error) {
       throw asScanStageError('crawl', error, buildScanStats(0, [], []));
     }
+    reportStageProgress(options.onProgress, {
+      current: 5,
+      total: 100,
+      stage: 'crawl',
+      detail: `发现 ${filePaths.length} 个候选文件`,
+    });
     // 使用 path.relative 确保跨平台兼容，并标准化为 / 分隔符
     const scannedPaths = new Set(
       filePaths.map((p) => path.relative(rootPath, p).replace(/\\/g, '/')),
@@ -231,6 +249,12 @@ export async function scan(rootPath: string, options: ScanOptions = {}): Promise
         const batch = filePaths.slice(i, i + batchSize);
         const batchResults = await processFiles(rootPath, batch, knownFiles);
         results.push(...batchResults);
+        reportStageProgress(options.onProgress, {
+          current: 10 + Math.floor((results.length / Math.max(filePaths.length, 1)) * 30),
+          total: 100,
+          stage: 'process',
+          detail: `已处理 ${results.length}/${filePaths.length} 个文件`,
+        });
       }
     } catch (error) {
       throw asScanStageError('process', error, buildScanStats(filePaths.length, results, []));
@@ -284,6 +308,12 @@ export async function scan(rootPath: string, options: ScanOptions = {}): Promise
     let stats = buildScanStats(filePaths.length, results, deletedPaths);
 
     try {
+      reportStageProgress(options.onProgress, {
+        current: 75,
+        total: 100,
+        stage: 'persist',
+        detail: '正在同步 SQLite / LanceDB / FTS',
+      });
       batchUpsert(db, toAdd);
       batchUpdateMtime(db, toUpdateMtime);
       batchDelete(db, deletedPaths);
@@ -324,7 +354,12 @@ export async function scan(rootPath: string, options: ScanOptions = {}): Promise
       const hasVectorWorkCandidates =
         needsVectorIndex.length > 0 || deletedPaths.length > 0 || healingFilePaths.length > 0;
       if (hasVectorWorkCandidates) {
-        options.onProgress?.(45, 100, '正在准备向量索引...');
+        reportStageProgress(options.onProgress, {
+          current: 45,
+          total: 100,
+          stage: 'chunk/embed',
+          detail: `待嵌入 ${needsVectorIndex.length} 个文件`,
+        });
       }
 
       let healingFiles: ProcessResult[] = [];
@@ -402,16 +437,31 @@ export async function scan(rootPath: string, options: ScanOptions = {}): Promise
             (r) => (r.status === 'added' || r.status === 'modified') && r.chunks.length > 0,
           ).length;
           if (embeddingFileCount > 0) {
-            options.onProgress?.(45, 100, `正在生成向量嵌入... (${embeddingFileCount} 个文件)`);
+            reportStageProgress(options.onProgress, {
+              current: 45,
+              total: 100,
+              stage: 'chunk/embed',
+              detail: `待嵌入 ${embeddingFileCount} 个文件`,
+            });
           } else {
-            options.onProgress?.(45, 100, '正在同步向量索引状态...');
+            reportStageProgress(options.onProgress, {
+              current: 75,
+              total: 100,
+              stage: 'persist',
+              detail: '正在同步 SQLite / LanceDB / FTS',
+            });
           }
 
           // 传递进度回调给 indexer（embedding API 调用是真正的耗时操作）
           const indexStats = await indexer.indexFiles(db, allToIndex, (completed, total) => {
             // 将 embedding 批次进度映射到 45-99 区间（保留 100 给最终完成）
             const progress = 45 + Math.floor((completed / total) * 54);
-            options.onProgress?.(progress, 100, `正在生成向量嵌入... (${completed}/${total} 批次)`);
+            reportStageProgress(options.onProgress, {
+              current: progress,
+              total: 100,
+              stage: 'chunk/embed',
+              detail: `已完成 ${completed}/${total} 个批次`,
+            });
           });
           stats.vectorIndex = {
             indexed: indexStats.indexed,
