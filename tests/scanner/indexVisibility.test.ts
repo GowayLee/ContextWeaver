@@ -37,13 +37,13 @@ describe('scanner visibility contracts', () => {
       largeFile: path.join(repoRoot, 'src/large.ts'),
       binaryFile: path.join(repoRoot, 'src/binary.bin'),
       ignoredJson: path.join(repoRoot, 'src/package-lock.json'),
-      noIndexableChunks: path.join(repoRoot, 'src/empty.ts'),
+      noIndexableChunks: path.join(repoRoot, 'src/empty.txt'),
       processingError: path.join(repoRoot, 'src/missing.ts'),
     };
 
     await fs.mkdir(path.join(repoRoot, 'src'), { recursive: true });
     await fs.writeFile(filePaths.largeFile, 'a'.repeat(101 * 1024), 'utf-8');
-    await fs.writeFile(filePaths.binaryFile, Buffer.from([0, 1, 2, 3]));
+    await fs.writeFile(filePaths.binaryFile, Buffer.from('abc\0def', 'utf-8'));
     await fs.writeFile(filePaths.ignoredJson, '{"lock":true}\n', 'utf-8');
     await fs.writeFile(filePaths.noIndexableChunks, '', 'utf-8');
 
@@ -66,7 +66,7 @@ describe('scanner visibility contracts', () => {
     expect(bucketByPath['src/large.ts']).toBe('large_file');
     expect(bucketByPath['src/binary.bin']).toBe('binary_file');
     expect(bucketByPath['src/package-lock.json']).toBe('ignored_json');
-    expect(bucketByPath['src/empty.ts']).toBe('no_indexable_chunks');
+    expect(bucketByPath['src/empty.txt']).toBe('no_indexable_chunks');
     expect(bucketByPath['src/missing.ts']).toBe('processing_error');
   });
 
@@ -127,7 +127,9 @@ describe('scanner visibility contracts', () => {
       closeAllVectorStores: vi.fn(),
     }));
     vi.doMock('../../src/scanner/crawler.js', () => ({
-      crawl: async () => ({ filePaths: [] }),
+      crawl: async () => ({
+        filePaths: ['/repo/src/large.ts', '/repo/src/empty.ts'],
+      }),
     }));
     vi.doMock('../../src/scanner/filter.js', () => ({
       initFilter: vi.fn(),
@@ -148,8 +150,8 @@ describe('scanner visibility contracts', () => {
           skipReason: 'large_file',
         },
         {
-          absPath: '/repo/src/empty.ts',
-          relPath: 'src/empty.ts',
+          absPath: '/repo/src/empty.txt',
+          relPath: 'src/empty.txt',
           hash: 'hash',
           content: '',
           chunks: [],

@@ -20,7 +20,26 @@ import { logger } from '../utils/logger.js';
 import { closeAllVectorStores } from '../vectorStore/index.js';
 import { crawl } from './crawler.js';
 import { initFilter } from './filter.js';
-import { type ProcessResult, processFiles } from './processor.js';
+import { type ProcessResult, processFiles, type SkipReasonBucket } from './processor.js';
+
+export type IndexStage = 'crawl' | 'process' | 'chunk/embed' | 'persist';
+
+export class ScanStageError extends Error {
+  readonly stage: IndexStage;
+  readonly partialStats?: ScanStats;
+
+  constructor(
+    stage: IndexStage,
+    message: string,
+    partialStats?: ScanStats,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = 'ScanStageError';
+    this.stage = stage;
+    this.partialStats = partialStats;
+  }
+}
 
 /**
  * 扫描结果统计
@@ -33,6 +52,14 @@ export interface ScanStats {
   deleted: number;
   skipped: number;
   errors: number;
+  skippedByReason: Partial<Record<SkipReasonBucket, number>>;
+  visibility: {
+    candidateFiles: number;
+    processedFiles: number;
+    embeddingFiles: number;
+    selfHealFiles: number;
+    deletedPaths: number;
+  };
   /** 向量索引统计 */
   vectorIndex?: {
     indexed: number;
@@ -62,6 +89,79 @@ export interface ScanOptions {
   onProgress?: ProgressCallback;
   /** 预先计算好的待扫描文件绝对路径 */
   precomputedFilePaths?: string[];
+}
+
+function incrementSkipBucket(
+  skippedByReason: Partial<Record<SkipReasonBucket, number>>,
+  bucket?: SkipReasonBucket,
+): void {
+  if (!bucket) {
+    return;
+  }
+
+  skippedByReason[bucket] = (skippedByReason[bucket] ?? 0) + 1;
+}
+
+function isNoIndexableChunkResult(result: ProcessResult): boolean {
+  return (
+    (result.status === 'added' || result.status === 'modified') &&
+    result.skipReason === 'no_indexable_chunks'
+  );
+}
+
+function buildScanStats(
+  fileCount: number,
+  results: ProcessResult[],
+  deletedPaths: string[],
+  visibility?: Partial<ScanStats['visibility']>,
+): ScanStats {
+  const skippedByReason: Partial<Record<SkipReasonBucket, number>> = {};
+  let skipped = 0;
+
+  for (const result of results) {
+    if (
+      result.status === 'skipped' ||
+      result.status === 'error' ||
+      isNoIndexableChunkResult(result)
+    ) {
+      skipped += 1;
+      incrementSkipBucket(skippedByReason, result.skipReason);
+    }
+  }
+
+  return {
+    totalFiles: fileCount,
+    added: results.filter((r) => r.status === 'added').length,
+    modified: results.filter((r) => r.status === 'modified').length,
+    unchanged: results.filter((r) => r.status === 'unchanged').length,
+    deleted: deletedPaths.length,
+    skipped,
+    errors: results.filter((r) => r.status === 'error').length,
+    skippedByReason,
+    visibility: {
+      candidateFiles: fileCount,
+      processedFiles: results.length,
+      embeddingFiles: 0,
+      selfHealFiles: 0,
+      deletedPaths: deletedPaths.length,
+      ...visibility,
+    },
+  };
+}
+
+function asScanStageError(
+  stage: IndexStage,
+  error: unknown,
+  partialStats?: ScanStats,
+): ScanStageError {
+  if (error instanceof ScanStageError) {
+    return error;
+  }
+
+  const source = error as { message?: string };
+  return new ScanStageError(stage, source.message || '未知错误', partialStats, {
+    cause: error,
+  });
 }
 
 /**
@@ -112,7 +212,12 @@ export async function scan(rootPath: string, options: ScanOptions = {}): Promise
     const knownFiles = getAllFileMeta(db);
 
     // 扫描文件系统
-    const filePaths = options.precomputedFilePaths ?? (await crawl(rootPath)).filePaths;
+    let filePaths: string[];
+    try {
+      filePaths = options.precomputedFilePaths ?? (await crawl(rootPath)).filePaths;
+    } catch (error) {
+      throw asScanStageError('crawl', error, buildScanStats(0, [], []));
+    }
     // 使用 path.relative 确保跨平台兼容，并标准化为 / 分隔符
     const scannedPaths = new Set(
       filePaths.map((p) => path.relative(rootPath, p).replace(/\\/g, '/')),
@@ -121,10 +226,14 @@ export async function scan(rootPath: string, options: ScanOptions = {}): Promise
     // 处理文件（文件处理很快，不需要报告进度）
     const results: ProcessResult[] = [];
     const batchSize = 100;
-    for (let i = 0; i < filePaths.length; i += batchSize) {
-      const batch = filePaths.slice(i, i + batchSize);
-      const batchResults = await processFiles(rootPath, batch, knownFiles);
-      results.push(...batchResults);
+    try {
+      for (let i = 0; i < filePaths.length; i += batchSize) {
+        const batch = filePaths.slice(i, i + batchSize);
+        const batchResults = await processFiles(rootPath, batch, knownFiles);
+        results.push(...batchResults);
+      }
+    } catch (error) {
+      throw asScanStageError('process', error, buildScanStats(filePaths.length, results, []));
     }
 
     // 准备数据库操作
@@ -172,19 +281,24 @@ export async function scan(rootPath: string, options: ScanOptions = {}): Promise
     }
 
     // 增量更新
-    batchUpsert(db, toAdd);
-    batchUpdateMtime(db, toUpdateMtime);
-    batchDelete(db, deletedPaths);
+    let stats = buildScanStats(filePaths.length, results, deletedPaths);
 
-    // 统计结果
-    const stats: ScanStats = {
-      totalFiles: filePaths.length,
-      added: results.filter((r) => r.status === 'added').length,
-      modified: results.filter((r) => r.status === 'modified').length,
-      unchanged: results.filter((r) => r.status === 'unchanged').length,
-      deleted: deletedPaths.length,
-      skipped: results.filter((r) => r.status === 'skipped').length,
-      errors: results.filter((r) => r.status === 'error').length,
+    try {
+      batchUpsert(db, toAdd);
+      batchUpdateMtime(db, toUpdateMtime);
+      batchDelete(db, deletedPaths);
+    } catch (error) {
+      throw asScanStageError('persist', error, stats);
+    }
+
+    stats = {
+      ...stats,
+      visibility: {
+        ...stats.visibility,
+        candidateFiles: filePaths.length,
+        processedFiles: results.length,
+        deletedPaths: deletedPaths.length,
+      },
     };
 
     // ===== 向量索引 =====
@@ -215,8 +329,13 @@ export async function scan(rootPath: string, options: ScanOptions = {}): Promise
 
       let healingFiles: ProcessResult[] = [];
       if (healingFilePaths.length > 0) {
-        // 重新处理这些文件（传入空的 knownFiles 强制重新读取和分片）
-        const processedHealingFiles = await processFiles(rootPath, healingFilePaths, new Map());
+        let processedHealingFiles: ProcessResult[];
+        try {
+          // 重新处理这些文件（传入空的 knownFiles 强制重新读取和分片）
+          processedHealingFiles = await processFiles(rootPath, healingFilePaths, new Map());
+        } catch (error) {
+          throw asScanStageError('process', error, stats);
+        }
         const healingIndexableCount = processedHealingFiles.filter(
           (r) => (r.status === 'added' || r.status === 'modified') && r.chunks.length > 0,
         ).length;
@@ -235,6 +354,19 @@ export async function scan(rootPath: string, options: ScanOptions = {}): Promise
         healingFiles = processedHealingFiles
           .filter((r) => r.status === 'added' || r.status === 'modified')
           .map((r) => ({ ...r, status: 'modified' as const }));
+
+        stats = buildScanStats(
+          filePaths.length,
+          [...results, ...processedHealingFiles],
+          deletedPaths,
+          {
+            candidateFiles: filePaths.length,
+            processedFiles: results.length,
+            embeddingFiles: stats.visibility.embeddingFiles,
+            selfHealFiles: healingFiles.length,
+            deletedPaths: deletedPaths.length,
+          },
+        );
       }
 
       // 为 deleted 文件创建占位 ProcessResult
@@ -253,6 +385,17 @@ export async function scan(rootPath: string, options: ScanOptions = {}): Promise
       const allToIndex = [...needsVectorIndex, ...healingFiles, ...deletedResults];
 
       if (allToIndex.length > 0) {
+        stats = {
+          ...stats,
+          visibility: {
+            ...stats.visibility,
+            embeddingFiles: allToIndex.filter(
+              (r) => (r.status === 'added' || r.status === 'modified') && r.chunks.length > 0,
+            ).length,
+            selfHealFiles: healingFiles.length,
+            deletedPaths: deletedPaths.length,
+          },
+        };
         try {
           // 报告向量更新阶段开始（包含新增/修改/删除/自愈收敛）
           const embeddingFileCount = allToIndex.filter(
@@ -278,9 +421,13 @@ export async function scan(rootPath: string, options: ScanOptions = {}): Promise
         } catch (err) {
           const error = err as { message?: string };
           if ((error.message || '').includes('向量嵌入阶段失败')) {
-            throw err;
+            throw asScanStageError('chunk/embed', err, stats);
           }
-          throw new Error(`向量嵌入阶段失败: ${error.message || '未知错误'}`);
+          throw asScanStageError(
+            'chunk/embed',
+            new Error(`向量嵌入阶段失败: ${error.message || '未知错误'}`),
+            stats,
+          );
         }
       }
     }

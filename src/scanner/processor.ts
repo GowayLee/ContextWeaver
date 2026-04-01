@@ -68,6 +68,47 @@ const splitter = new SemanticSplitter({
   chunkOverlap: 40, // 混合检索(BM25+向量+rerank)下的保守 overlap
 });
 
+export type SkipReasonBucket =
+  | 'large_file'
+  | 'binary_file'
+  | 'ignored_json'
+  | 'no_indexable_chunks'
+  | 'processing_error';
+
+function classifySkipReason(options: {
+  status: ProcessResult['status'];
+  error?: string;
+  chunks: ProcessedChunk[];
+}): SkipReasonBucket | undefined {
+  if (options.status === 'error') {
+    return 'processing_error';
+  }
+
+  if (options.status === 'added' || options.status === 'modified') {
+    if (options.chunks.length === 0) {
+      return 'no_indexable_chunks';
+    }
+    return undefined;
+  }
+
+  if (options.status !== 'skipped') {
+    return undefined;
+  }
+
+  const message = options.error ?? '';
+  if (message.startsWith('File too large')) {
+    return 'large_file';
+  }
+  if (message.startsWith('Binary file detected')) {
+    return 'binary_file';
+  }
+  if (message === 'Lock file or node_modules JSON') {
+    return 'ignored_json';
+  }
+
+  return 'processing_error';
+}
+
 /**
  * 文件处理结果
  */
@@ -82,6 +123,7 @@ export interface ProcessResult {
   size: number;
   status: 'added' | 'modified' | 'unchanged' | 'deleted' | 'skipped' | 'error';
   error?: string;
+  skipReason?: SkipReasonBucket;
 }
 
 /**
@@ -121,6 +163,7 @@ async function processFile(
         size,
         status: 'skipped',
         error: `File too large (${size} bytes > ${MAX_FILE_SIZE} bytes)`,
+        skipReason: 'large_file',
       };
     }
 
@@ -155,6 +198,7 @@ async function processFile(
         size,
         status: 'skipped',
         error: `Binary file detected (original encoding: ${originalEncoding})`,
+        skipReason: 'binary_file',
       };
     }
 
@@ -189,6 +233,7 @@ async function processFile(
         size,
         status: 'skipped',
         error: 'Lock file or node_modules JSON',
+        skipReason: 'ignored_json',
       };
     }
 
@@ -215,6 +260,7 @@ async function processFile(
       chunks = splitter.splitPlainText(content, relPath, language);
     }
 
+    const status = known ? 'modified' : 'added';
     return {
       absPath,
       relPath,
@@ -224,7 +270,8 @@ async function processFile(
       language,
       mtime,
       size,
-      status: known ? 'modified' : 'added',
+      status,
+      skipReason: classifySkipReason({ status, chunks }),
     };
   } catch (err) {
     const error = err as { message?: string };
@@ -239,6 +286,7 @@ async function processFile(
       size: 0,
       status: 'error',
       error: error.message,
+      skipReason: 'processing_error',
     };
   }
 }

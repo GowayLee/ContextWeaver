@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Phase 3 context gathered
-last_updated: "2026-04-01T02:05:16.839Z"
+status: in_progress
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-04-01T02:23:31.431Z"
 last_activity: 2026-04-01
 progress:
   total_phases: 6
   completed_phases: 3
-  total_plans: 6
-  completed_plans: 6
-  percent: 100
+  total_plans: 9
+  completed_plans: 7
+  percent: 78
 ---
 
 # Project State
@@ -21,24 +21,24 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-31)
 
 **Core value:** Agent 能稳定、可信地从本地代码库中获得可用的检索结果与上下文证据，而不是在索引或搜索主链路中遇到误导性成功状态或难以诊断的失败。
-**Current focus:** Phase 02.1 — contextweaver-cw (urgent insertion, not planned)
+**Current focus:** Phase 3 — Index Visibility
 
 ## Current Position
 
-Phase: 02.1
+Phase: 03
 Plan: 02
-Status: Plan 02 completed — Phase 02.1 complete
+Status: Plan 01 completed — ready for Plan 02
 Last activity: 2026-04-01
 
-Progress: [██████████] 100%
+Progress: [████████░░] 78%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 6
-- Average duration: 13 min
-- Total execution time: 1.33 hours
+- Total plans completed: 7
+- Average duration: 12 min
+- Total execution time: 1.43 hours
 
 **By Phase:**
 
@@ -47,10 +47,11 @@ Progress: [██████████] 100%
 | 1     | 2     | 50 min | 25 min   |
 | 2     | 2     | 13 min | 7 min    |
 | 2.1   | 2     | 20 min | 10 min   |
+| 3     | 1     | 6 min  | 6 min    |
 
 **Recent Trend:**
 
-- Last 5 plans: 01-02, 02-01, 02-02, 02.1-01, 02.1-02
+- Last 5 plans: 02-01, 02-02, 02.1-01, 02.1-02, 03-01
 - Trend: Stable
 
 _Updated after each plan completion_
@@ -58,6 +59,7 @@ _Updated after each plan completion_
 | Phase 02 P02 | 2 min | 2 tasks | 2 files |
 | Phase 02.1 P01 | 15 | 2 tasks | 1 files |
 | Phase 02.1 P02 | 5 | 2 tasks | 2 files |
+| Phase 03 P01 | 6 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -79,6 +81,8 @@ Recent decisions affecting current work:
 - [Phase 02.1]: 用临时包装器模拟 contextweaver 与 cw 两个发布别名，锁定共享入口的一致性。
 - [Phase 02.1]: 在 src/index.ts 入口边界统一把 [] 与 help 归一化为 --help，而不是给单个命令打补丁。
 - [Phase 02.1]: 主模块分支改为调用 runCli，并显式把规范化后的 argv 传给 cli.parse(...)。
+- [Phase 03]: 在 scanner/processor.ts 内直接产出 skipReason，避免 CLI 再从自由文本猜分类。
+- [Phase 03]: 用 ScanStageError 在 scanner 边界上传 stage 与 partialStats，让后续 CLI 计划只负责渲染。
 
 ### Roadmap Evolution
 
@@ -95,6 +99,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-01T02:05:16.835Z
-Stopped at: Phase 3 context gathered
-Resume file: .planning/phases/03-index-visibility/03-CONTEXT.md
+Last session: 2026-04-01T02:23:31.424Z
+Stopped at: Completed 03-01-PLAN.md
+Resume file: None
