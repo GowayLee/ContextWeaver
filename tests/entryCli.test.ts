@@ -59,6 +59,14 @@ exec ${JSON.stringify(process.execPath)} ${JSON.stringify(distEntryPath)} "$@"
   return wrapperPath;
 }
 
+async function createAliasSymlink(commandName: string): Promise<string> {
+  const symlinkDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cw-entry-symlink-'));
+  const symlinkPath = path.join(symlinkDir, commandName);
+
+  await fs.symlink(distEntryPath, symlinkPath);
+  return symlinkPath;
+}
+
 function runAlias(wrapperPath: string, args: string[]): EntryResult {
   const result = spawnSync(wrapperPath, args, {
     cwd: repoRoot,
@@ -128,6 +136,22 @@ describe('CLI entry smoke tests', () => {
       expect(cwResult.status).toBe(0);
       expect(contextweaverResult.output).toBe(cwResult.output);
     }
+  });
+
+  it('shows help when launched through published symlink aliases without arguments', async () => {
+    const contextweaverPath = await createAliasSymlink('contextweaver');
+    const cwPath = await createAliasSymlink('cw');
+
+    const contextweaverResult = runAlias(contextweaverPath, []);
+    const cwResult = runAlias(cwPath, []);
+
+    expect(contextweaverResult.status).toBe(0);
+    expect(cwResult.status).toBe(0);
+    expect(contextweaverResult.output).not.toBe('');
+    expect(cwResult.output).not.toBe('');
+    expect(contextweaverResult.output).toContain('Usage:');
+    expect(cwResult.output).toContain('Usage:');
+    expect(contextweaverResult.output).toBe(cwResult.output);
   });
 
   it('shows visible output for representative shared-entry dispatches', () => {

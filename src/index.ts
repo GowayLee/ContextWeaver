@@ -15,6 +15,8 @@ import {
   runCleanIndexes,
   runIndexCommand,
 } from './cli.js';
+import { ScanStageError, type ScanStats } from './scanner/index.js';
+import type { SkipReasonBucket } from './scanner/processor.js';
 import { logger } from './utils/logger.js';
 
 // 读取 package.json 获取版本号
@@ -90,6 +92,103 @@ function formatNoneValue(value: string | null | undefined): string {
   return value;
 }
 
+const SKIP_REASON_LABELS: Record<SkipReasonBucket, string> = {
+  large_file: '大文件',
+  binary_file: '二进制文件',
+  ignored_json: '忽略的 JSON',
+  no_indexable_chunks: '无可索引 chunk',
+  processing_error: '处理失败',
+};
+
+function formatSkipReasons(
+  skippedByReason: Partial<Record<SkipReasonBucket, number>>,
+): string | null {
+  const parts = (Object.entries(SKIP_REASON_LABELS) as Array<[SkipReasonBucket, string]>)
+    .map(([bucket, label]) => {
+      const count = skippedByReason[bucket];
+      return count && count > 0 ? `${label} ${count}` : null;
+    })
+    .filter((part): part is string => part !== null);
+
+  if (parts.length === 0) {
+    return null;
+  }
+
+  return `跳过原因: ${parts.join(', ')}`;
+}
+
+function formatStatsLine(stats: ScanStats): string {
+  return `总数:${stats.totalFiles} 新增:${stats.added} 修改:${stats.modified} 未变:${stats.unchanged} 删除:${stats.deleted} 跳过:${stats.skipped} 错误:${stats.errors}`;
+}
+
+function formatKnownStatsLine(stats: ScanStats): string {
+  return `已知统计: ${formatStatsLine(stats)}`;
+}
+
+function getSuccessConclusion(stats: ScanStats): string {
+  const hasIndexableChanges = stats.added > 0 || stats.modified > 0;
+  const hasSyncOnlyWork =
+    !hasIndexableChanges &&
+    ((stats.vectorIndex?.deleted ?? 0) > 0 ||
+      stats.visibility.selfHealFiles > 0 ||
+      stats.deleted > 0);
+
+  if (!hasIndexableChanges && !hasSyncOnlyWork) {
+    return '索引完成：没有检测到新的可索引变更';
+  }
+
+  if (hasSyncOnlyWork) {
+    return '索引完成：已同步删除或自愈，无新增向量嵌入';
+  }
+
+  return '索引完成：索引已更新';
+}
+
+function renderSuccessSummary(stats: ScanStats, duration: string): string[] {
+  const lines = [getSuccessConclusion(stats), `耗时: ${duration}s`, formatStatsLine(stats)];
+  const skipReasons = stats.skipped > 0 ? formatSkipReasons(stats.skippedByReason) : null;
+  if (skipReasons) {
+    lines.push(skipReasons);
+  }
+  return lines;
+}
+
+function findEmbeddingFatalError(error: unknown): EmbeddingFatalError | null {
+  if (error instanceof EmbeddingFatalError) {
+    return error;
+  }
+
+  if (error instanceof ScanStageError && error.cause instanceof EmbeddingFatalError) {
+    return error.cause;
+  }
+
+  return null;
+}
+
+function renderFailureSummary(error: unknown): string[] {
+  const source = error as { message?: string };
+  const lines = [`索引失败：${source.message || '未知错误'}`];
+
+  if (error instanceof ScanStageError) {
+    lines.push(`失败阶段: ${error.stage}`);
+    if (error.partialStats) {
+      lines.push(formatKnownStatsLine(error.partialStats));
+      const skipReasons = formatSkipReasons(error.partialStats.skippedByReason);
+      if (skipReasons) {
+        lines.push(skipReasons);
+      }
+    }
+  }
+
+  const fatal = findEmbeddingFatalError(error);
+  const diagnosticsLines = fatal ? formatEmbeddingFailureDiagnostics(fatal) : null;
+  if (diagnosticsLines) {
+    lines.push(...diagnosticsLines);
+  }
+
+  return lines;
+}
+
 export async function runIndexCliCommand(options: {
   rootPath: string;
   force?: boolean;
@@ -116,18 +215,12 @@ export async function runIndexCliCommand(options: {
     });
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    output.info(`索引完成 (${duration}s)`);
-    output.info(
-      `总数:${stats.totalFiles} 新增:${stats.added} 修改:${stats.modified} 未变:${stats.unchanged} 删除:${stats.deleted} 跳过:${stats.skipped} 错误:${stats.errors}`,
-    );
+    for (const line of renderSuccessSummary(stats, duration)) {
+      output.info(line);
+    }
   } catch (err) {
-    const error = err as { message?: string };
-    output.error(`索引失败: ${error.message || '未知错误'}`);
-    const diagnosticsLines = formatEmbeddingFailureDiagnostics(err);
-    if (diagnosticsLines) {
-      for (const line of diagnosticsLines) {
-        output.error(line);
-      }
+    for (const line of renderFailureSummary(err)) {
+      output.error(line);
     }
     exit(1);
   }

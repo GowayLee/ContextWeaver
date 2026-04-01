@@ -435,7 +435,7 @@ describe('cli helpers', () => {
 
     expect(info).not.toHaveBeenCalledWith(expect.stringContaining('索引完成'));
     expect(info).not.toHaveBeenCalledWith(expect.stringContaining('总数:'));
-    expect(error).toHaveBeenCalledWith('索引失败: 向量嵌入阶段失败: provider exploded');
+    expect(error).toHaveBeenCalledWith('索引失败：向量嵌入阶段失败: provider exploded');
     expect(exit).toHaveBeenCalledWith(1);
   });
 
@@ -469,7 +469,7 @@ describe('cli helpers', () => {
       exit,
     });
 
-    expect(error).toHaveBeenNthCalledWith(1, '索引失败: 向量嵌入阶段失败: batch too large');
+    expect(error).toHaveBeenNthCalledWith(1, '索引失败：向量嵌入阶段失败: batch too large');
     expect(error).toHaveBeenCalledWith('阶段: embed');
     expect(error).toHaveBeenCalledWith('错误类别: batch_too_large');
     expect(error).toHaveBeenCalledWith('HTTP 状态: 400');
@@ -504,7 +504,7 @@ describe('cli helpers', () => {
       exit,
     });
 
-    expect(info).toHaveBeenCalledWith(expect.stringContaining('索引完成 ('));
+    expect(info).toHaveBeenCalledWith('索引完成：索引已更新');
     expect(info).toHaveBeenCalledWith(expect.stringContaining('总数:3 新增:3'));
     expect(error).not.toHaveBeenCalled();
     expect(exit).not.toHaveBeenCalled();
