@@ -24,6 +24,18 @@ const pkg = JSON.parse(await fs.readFile(pkgPath, 'utf-8'));
 
 const cli = cac('contextweaver');
 
+export function normalizeCliArgs(argv: string[]): string[] {
+  if (argv.length === 0) {
+    return ['--help'];
+  }
+
+  if (argv.length === 1 && argv[0] === 'help') {
+    return ['--help'];
+  }
+
+  return argv;
+}
+
 function formatEmbeddingFailureDiagnostics(error: unknown): string[] | null {
   if (!(error instanceof EmbeddingFatalError)) {
     return null;
@@ -363,5 +375,5 @@ cli
 cli.help();
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  cli.parse();
+  cli.parse([process.execPath, process.argv[1], ...normalizeCliArgs(process.argv.slice(2))]);
 }
