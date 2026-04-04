@@ -59,6 +59,8 @@ export interface EmbeddingConfig {
   maxConcurrency: number;
   /** 向量维度 */
   dimensions: number;
+  /** 模型最大输入 token 数，超过此值的文本会在请求前截断 */
+  maxInputTokens: number;
 }
 
 export interface RerankerConfig {
@@ -152,6 +154,7 @@ export function getEmbeddingConfig(): EmbeddingConfig {
   }
 
   const dimensions = parseInt(process.env.EMBEDDINGS_DIMENSIONS || '1024', 10);
+  const maxInputTokens = parseInt(process.env.EMBEDDINGS_MAX_INPUT_TOKENS || '8192', 10);
 
   return {
     apiKey,
@@ -159,6 +162,7 @@ export function getEmbeddingConfig(): EmbeddingConfig {
     model,
     maxConcurrency: Number.isNaN(maxConcurrency) ? 4 : maxConcurrency,
     dimensions: Number.isNaN(dimensions) ? 1024 : dimensions,
+    maxInputTokens: Number.isNaN(maxInputTokens) ? 8192 : maxInputTokens,
   };
 }
 

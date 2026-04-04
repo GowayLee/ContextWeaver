@@ -50,6 +50,7 @@ EMBEDDINGS_BASE_URL=https://api.siliconflow.cn/v1/embeddings
 EMBEDDINGS_MODEL=BAAI/bge-m3
 EMBEDDINGS_MAX_CONCURRENCY=10
 EMBEDDINGS_DIMENSIONS=1024
+EMBEDDINGS_MAX_INPUT_TOKENS=8192
 
 RERANK_API_KEY=your-api-key-here
 RERANK_BASE_URL=https://api.siliconflow.cn/v1/rerank
@@ -134,6 +135,10 @@ Skill 链路: CLI 结构化 JSON 输出 → Skill 脚本 → Agent 解释/提问
 | `ContextPacker` | `src/search/ContextPacker.ts` | 段落合并与预算控制          |
 | `retrieval`     | `src/retrieval/index.ts`      | 结构化检索输出与 CLI 渲染   |
 | `promptContext` | `src/promptContext/index.ts`  | Prompt 证据准备与技术词提取 |
+
+### 超长 Chunk 自动拆分
+
+Embedding 模型对单次输入有 token 上限（由 `EMBEDDINGS_MAX_INPUT_TOKENS` 控制，默认 8192）。当某个 chunk 超过上限时，ContextWeaver 会按行将其拆分为多个符合限制的子片段，分别请求 Embedding，再将所得向量逐维平均聚合为单个最终向量。整个过程无需人工干预，超限时会输出 warn 日志供排查。
 
 ## 多语言支持
 

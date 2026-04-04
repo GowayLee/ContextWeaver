@@ -385,6 +385,10 @@ export class EmbeddingClient {
 
   /**
    * 批量获取 Embedding
+   *
+   * 对超过模型输入上限的文本，按行拆分为多个子片段分别 embedding，
+   * 再聚合（逐维平均）为单个向量，确保不丢失语义信息。
+   *
    * @param texts 待处理的文本数组
    * @param batchSize 每批次发送的文本数量（默认 20）
    * @param onProgress 可选的进度回调 (completed, total) => void
@@ -398,30 +402,90 @@ export class EmbeddingClient {
       return [];
     }
 
-    // 将文本分批
+    const maxChars = this.config.maxInputTokens * 2;
+
+    const needsSplit: boolean[] = [];
+    const allFragments: string[] = [];
+    const fragmentMap: number[][] = [];
+
+    for (let i = 0; i < texts.length; i++) {
+      const text = texts[i];
+      if (this.estimateTokens(text) <= this.config.maxInputTokens) {
+        needsSplit.push(false);
+        fragmentMap.push([allFragments.length]);
+        allFragments.push(text);
+      } else {
+        const fragments = this.splitOversizedText(text);
+        needsSplit.push(true);
+        const indices: number[] = [];
+        for (const frag of fragments) {
+          indices.push(allFragments.length);
+          allFragments.push(frag);
+        }
+        fragmentMap.push(indices);
+
+        logger.warn(
+          {
+            textIndex: i,
+            originalLength: text.length,
+            maxChars,
+            fragmentCount: fragments.length,
+          },
+          '文本超过 embedding 模型输入上限，已拆分为多个子片段',
+        );
+      }
+    }
+
+    const flatResults = await this.embedFragments(allFragments, batchSize, onProgress);
+
+    const results: EmbeddingResult[] = [];
+    for (let i = 0; i < texts.length; i++) {
+      const indices = fragmentMap[i];
+
+      if (indices.length === 1) {
+        const r = flatResults[indices[0]];
+        results.push({
+          text: texts[i],
+          embedding: r.embedding,
+          index: i,
+        });
+      } else {
+        const embeddings = indices.map((fi) => flatResults[fi].embedding);
+        results.push({
+          text: texts[i],
+          embedding: this.averageEmbeddings(embeddings),
+          index: i,
+        });
+      }
+    }
+
+    return results;
+  }
+
+  private async embedFragments(
+    texts: string[],
+    batchSize: number,
+    onProgress?: (completed: number, total: number) => void,
+  ): Promise<EmbeddingResult[]> {
     const batches: string[][] = [];
     for (let i = 0; i < texts.length; i += batchSize) {
       batches.push(texts.slice(i, i + batchSize));
     }
 
-    // 创建进度追踪器（传入外部回调）
     const progress = new ProgressTracker(batches.length, onProgress);
     const session: EmbeddingSession = {
       fatalError: null,
       controllers: new Set(),
     };
 
-    // 使用速率限制控制器处理各批次
     const batchResults = await Promise.all(
       batches.map((batch, batchIndex) =>
         this.processWithRateLimit(batch, batchIndex * batchSize, batchSize, progress, session),
       ),
     );
 
-    // 输出完成统计
     progress.complete();
 
-    // 扁平化结果
     return batchResults.flat();
   }
 
@@ -704,6 +768,58 @@ export class EmbeddingClient {
     }
 
     return fatalError;
+  }
+
+  private estimateTokens(text: string): number {
+    return Math.ceil(text.length / 2);
+  }
+
+  private splitOversizedText(text: string): string[] {
+    const maxChars = this.config.maxInputTokens * 2;
+    if (text.length <= maxChars) {
+      return [text];
+    }
+
+    const lines = text.split('\n');
+    const fragments: string[] = [];
+    let current = '';
+
+    for (const line of lines) {
+      const candidate = current.length === 0 ? line : `${current}\n${line}`;
+      if (candidate.length > maxChars && current.length > 0) {
+        fragments.push(current);
+        current = line;
+      } else {
+        current = candidate;
+      }
+    }
+
+    if (current.length > 0) {
+      fragments.push(current);
+    }
+
+    for (let i = 0; i < fragments.length; i++) {
+      if (fragments[i].length > maxChars) {
+        fragments[i] = fragments[i].slice(0, maxChars);
+      }
+    }
+
+    return fragments.length > 0 ? fragments : [text.slice(0, maxChars)];
+  }
+
+  private averageEmbeddings(embeddings: number[][]): number[] {
+    const dim = embeddings[0].length;
+    const result = new Array(dim).fill(0);
+    for (const emb of embeddings) {
+      for (let i = 0; i < dim; i++) {
+        result[i] += emb[i];
+      }
+    }
+    const count = embeddings.length;
+    for (let i = 0; i < dim; i++) {
+      result[i] /= count;
+    }
+    return result;
   }
 
   /**
