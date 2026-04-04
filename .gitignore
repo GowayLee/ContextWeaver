@@ -11,4 +11,8 @@ test-*
 .codex
 .pnpm-store
 .opencode
+.kiro
+.vscode
 package-lock.json
+*.tgz
+*.log

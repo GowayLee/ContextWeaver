@@ -101,7 +101,7 @@ export async function getParser(language: string): Promise<Parser | null> {
 
   // 创建解析器
   const parser = new Parser();
-  parser.setLanguage(grammar);
+  parser.setLanguage(grammar as Parameters<typeof parser.setLanguage>[0]);
 
   // 缓存
   parserCache.set(language, parser);
