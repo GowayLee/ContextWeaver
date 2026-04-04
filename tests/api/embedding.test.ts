@@ -4,6 +4,11 @@ import {
   EmbeddingFatalError,
   resetEmbeddingClientForTests,
 } from '../../src/api/embedding.js';
+import {
+  aggregateFragmentEmbeddings,
+  planEmbeddingFragments,
+  splitOversizedText,
+} from '../../src/api/embeddingFragments.js';
 
 function createClient(overrides?: Partial<ConstructorParameters<typeof EmbeddingClient>[0]>) {
   return new EmbeddingClient({
@@ -12,6 +17,7 @@ function createClient(overrides?: Partial<ConstructorParameters<typeof Embedding
     model: 'test-model',
     maxConcurrency: 1,
     dimensions: 3,
+    maxInputTokens: 1000,
     ...overrides,
   });
 }
@@ -109,6 +115,53 @@ describe('EmbeddingClient fatal session', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(onProgress).not.toHaveBeenCalled();
+  });
+});
+
+describe('embeddingFragments helpers', () => {
+  it('keeps texts within limit as single fragments', () => {
+    const plan = planEmbeddingFragments(['short text', 'another'], 100);
+
+    expect(plan.allFragments).toEqual(['short text', 'another']);
+    expect(plan.fragmentMap).toEqual([[0], [1]]);
+    expect(plan.splitTexts).toEqual([]);
+  });
+
+  it('splits oversized text by line and aggregates fragment embeddings back', () => {
+    const text = ['alpha', 'beta', 'gamma', 'delta'].join('\n');
+
+    const fragments = splitOversizedText(text, 4);
+    expect(fragments).toEqual(['alpha', 'beta', 'gamma', 'delta']);
+
+    const plan = planEmbeddingFragments([text, 'tail'], 4);
+    const aggregated = aggregateFragmentEmbeddings([text, 'tail'], plan.fragmentMap, [
+      { embedding: [1, 3, 5] },
+      { embedding: [3, 5, 7] },
+      { embedding: [5, 7, 9] },
+      { embedding: [7, 9, 11] },
+      { embedding: [10, 20, 30] },
+    ]);
+
+    expect(plan.fragmentMap).toEqual([[0, 1, 2, 3], [4]]);
+    expect(plan.splitTexts).toEqual([
+      {
+        textIndex: 0,
+        originalLength: text.length,
+        fragmentCount: 4,
+      },
+    ]);
+    expect(aggregated).toEqual([
+      {
+        text,
+        embedding: [4, 6, 8],
+        index: 0,
+      },
+      {
+        text: 'tail',
+        embedding: [10, 20, 30],
+        index: 1,
+      },
+    ]);
   });
 });
 

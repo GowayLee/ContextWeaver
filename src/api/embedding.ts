@@ -13,6 +13,7 @@
 
 import { type EmbeddingConfig, getEmbeddingConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
+import { aggregateFragmentEmbeddings, planEmbeddingFragments } from './embeddingFragments.js';
 
 export type EmbeddingFailureCategory =
   | 'authentication'
@@ -404,62 +405,22 @@ export class EmbeddingClient {
 
     const maxChars = this.config.maxInputTokens * 2;
 
-    const needsSplit: boolean[] = [];
-    const allFragments: string[] = [];
-    const fragmentMap: number[][] = [];
+    const fragmentPlan = planEmbeddingFragments(texts, this.config.maxInputTokens);
 
-    for (let i = 0; i < texts.length; i++) {
-      const text = texts[i];
-      if (this.estimateTokens(text) <= this.config.maxInputTokens) {
-        needsSplit.push(false);
-        fragmentMap.push([allFragments.length]);
-        allFragments.push(text);
-      } else {
-        const fragments = this.splitOversizedText(text);
-        needsSplit.push(true);
-        const indices: number[] = [];
-        for (const frag of fragments) {
-          indices.push(allFragments.length);
-          allFragments.push(frag);
-        }
-        fragmentMap.push(indices);
-
-        logger.warn(
-          {
-            textIndex: i,
-            originalLength: text.length,
-            maxChars,
-            fragmentCount: fragments.length,
-          },
-          '文本超过 embedding 模型输入上限，已拆分为多个子片段',
-        );
-      }
+    for (const splitText of fragmentPlan.splitTexts) {
+      logger.warn(
+        {
+          textIndex: splitText.textIndex,
+          originalLength: splitText.originalLength,
+          maxChars,
+          fragmentCount: splitText.fragmentCount,
+        },
+        '文本超过 embedding 模型输入上限，已拆分为多个子片段',
+      );
     }
 
-    const flatResults = await this.embedFragments(allFragments, batchSize, onProgress);
-
-    const results: EmbeddingResult[] = [];
-    for (let i = 0; i < texts.length; i++) {
-      const indices = fragmentMap[i];
-
-      if (indices.length === 1) {
-        const r = flatResults[indices[0]];
-        results.push({
-          text: texts[i],
-          embedding: r.embedding,
-          index: i,
-        });
-      } else {
-        const embeddings = indices.map((fi) => flatResults[fi].embedding);
-        results.push({
-          text: texts[i],
-          embedding: this.averageEmbeddings(embeddings),
-          index: i,
-        });
-      }
-    }
-
-    return results;
+    const flatResults = await this.embedFragments(fragmentPlan.allFragments, batchSize, onProgress);
+    return aggregateFragmentEmbeddings(texts, fragmentPlan.fragmentMap, flatResults);
   }
 
   private async embedFragments(
@@ -768,58 +729,6 @@ export class EmbeddingClient {
     }
 
     return fatalError;
-  }
-
-  private estimateTokens(text: string): number {
-    return Math.ceil(text.length / 2);
-  }
-
-  private splitOversizedText(text: string): string[] {
-    const maxChars = this.config.maxInputTokens * 2;
-    if (text.length <= maxChars) {
-      return [text];
-    }
-
-    const lines = text.split('\n');
-    const fragments: string[] = [];
-    let current = '';
-
-    for (const line of lines) {
-      const candidate = current.length === 0 ? line : `${current}\n${line}`;
-      if (candidate.length > maxChars && current.length > 0) {
-        fragments.push(current);
-        current = line;
-      } else {
-        current = candidate;
-      }
-    }
-
-    if (current.length > 0) {
-      fragments.push(current);
-    }
-
-    for (let i = 0; i < fragments.length; i++) {
-      if (fragments[i].length > maxChars) {
-        fragments[i] = fragments[i].slice(0, maxChars);
-      }
-    }
-
-    return fragments.length > 0 ? fragments : [text.slice(0, maxChars)];
-  }
-
-  private averageEmbeddings(embeddings: number[][]): number[] {
-    const dim = embeddings[0].length;
-    const result = new Array(dim).fill(0);
-    for (const emb of embeddings) {
-      for (let i = 0; i < dim; i++) {
-        result[i] += emb[i];
-      }
-    }
-    const count = embeddings.length;
-    for (let i = 0; i < dim; i++) {
-      result[i] /= count;
-    }
-    return result;
   }
 
   /**
