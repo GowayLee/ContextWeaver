@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { EmbeddingFatalError } from '../../src/api/embedding.js';
+import { EmbeddingFatalError } from '../../src/api/embedding/index.js';
 import { Indexer } from '../../src/indexer/index.js';
 import type { ProcessResult } from '../../src/scanner/processor.js';
 

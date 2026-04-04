@@ -9,7 +9,11 @@
  */
 
 import type Database from 'better-sqlite3';
-import { type EmbeddingClient, EmbeddingFatalError, getEmbeddingClient } from '../api/embedding.js';
+import {
+  type EmbeddingClient,
+  EmbeddingFatalError,
+  getEmbeddingClient,
+} from '../api/embedding/index.js';
 import type { ProcessedChunk } from '../chunking/types.js';
 import { batchUpdateVectorIndexHash, clearVectorIndexHash } from '../db/index.js';
 import type { ProcessResult } from '../scanner/processor.js';

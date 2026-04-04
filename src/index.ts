@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import cac from 'cac';
-import { type EmbeddingFailureDiagnostics, EmbeddingFatalError } from './api/embedding.js';
+import { type EmbeddingFailureDiagnostics, EmbeddingFatalError } from './api/embedding/index.js';
 import {
   initProjectConfigCommand,
   installBundledSkills,
@@ -43,7 +43,7 @@ function formatEmbeddingFailureDiagnostics(error: unknown): string[] | null {
     return null;
   }
 
-  const diagnostics = error.diagnostics;
+  const diagnostics: EmbeddingFailureDiagnostics = error.diagnostics;
   const endpointPath = sanitizeEndpointPath(diagnostics.endpointPath);
 
   return [

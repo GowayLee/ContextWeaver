@@ -9,7 +9,7 @@
  */
 
 import type Database from 'better-sqlite3';
-import { getRerankerClient } from '../api/reranker.js';
+import { getRerankerClient } from '../api/reranker/index.js';
 import { getEmbeddingConfig } from '../config.js';
 import { initDb } from '../db/index.js';
 import { getIndexer, type Indexer } from '../indexer/index.js';

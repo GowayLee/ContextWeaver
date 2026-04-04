@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { EmbeddingFatalError } from '../src/api/embedding.js';
+import { EmbeddingFatalError } from '../src/api/embedding/index.js';
 import {
   buildIndexPreview,
   buildIndexScopeLogLines,

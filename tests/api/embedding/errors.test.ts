@@ -3,14 +3,7 @@ import {
   EmbeddingClient,
   EmbeddingFatalError,
   resetEmbeddingClientForTests,
-} from '../../src/api/embedding.js';
-import {
-  aggregateFragmentEmbeddings,
-  estimateEmbeddingTokens,
-  getEmbeddingTokenBudget,
-  planEmbeddingFragments,
-  splitOversizedText,
-} from '../../src/api/embeddingFragments.js';
+} from '../../../src/api/embedding/index.js';
 
 function createClient(overrides?: Partial<ConstructorParameters<typeof EmbeddingClient>[0]>) {
   return new EmbeddingClient({
@@ -22,24 +15,6 @@ function createClient(overrides?: Partial<ConstructorParameters<typeof Embedding
     maxInputTokens: 1000,
     ...overrides,
   });
-}
-
-function successResponse(index: number) {
-  return {
-    ok: true,
-    json: async () => ({
-      data: [{ index, embedding: [index + 0.1, index + 0.2, index + 0.3] }],
-      usage: { total_tokens: 10 },
-    }),
-  } as Response;
-}
-
-function failureResponse(message: string) {
-  return {
-    ok: false,
-    status: 500,
-    json: async () => ({ error: { message } }),
-  } as Response;
 }
 
 function httpErrorResponse(options: {
@@ -69,125 +44,7 @@ function okJsonResponse(body: unknown) {
   } as Response;
 }
 
-describe('EmbeddingClient fatal session', () => {
-  const originalFetch = global.fetch;
-
-  beforeEach(() => {
-    vi.restoreAllMocks();
-    resetEmbeddingClientForTests();
-  });
-
-  afterEach(() => {
-    global.fetch = originalFetch;
-    resetEmbeddingClientForTests();
-  });
-
-  it('stops starting unstarted batches after the first fatal embedding failure', async () => {
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(successResponse(0))
-      .mockResolvedValueOnce(failureResponse('provider exploded'));
-    global.fetch = fetchMock;
-
-    const client = createClient({ maxConcurrency: 1 });
-
-    await expect(client.embedBatch(['a', 'b', 'c'], 1)).rejects.toThrow('provider exploded');
-
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
-
-  it('discards late successful results after fatal state without advancing progress', async () => {
-    const onProgress = vi.fn();
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockImplementationOnce(
-        () =>
-          new Promise<Response>((resolve) => {
-            setTimeout(() => resolve(successResponse(0)), 20);
-          }),
-      )
-      .mockResolvedValueOnce(failureResponse('fatal batch failure'));
-    global.fetch = fetchMock;
-
-    const client = createClient({ maxConcurrency: 2 });
-
-    await expect(client.embedBatch(['a', 'b', 'c'], 1, onProgress)).rejects.toThrow(
-      'fatal batch failure',
-    );
-
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(onProgress).not.toHaveBeenCalled();
-  });
-});
-
-describe('embeddingFragments helpers', () => {
-  it('uses conservative token estimates for ascii chinese and multibyte text', () => {
-    expect(estimateEmbeddingTokens('abcdef')).toBe(6);
-    expect(estimateEmbeddingTokens('你好世界')).toBe(6);
-    expect(estimateEmbeddingTokens('你好🙂')).toBe(5);
-    expect(getEmbeddingTokenBudget(40)).toEqual({
-      maxInputTokens: 40,
-      safetyMarginTokens: 2,
-      effectiveTokenBudget: 38,
-    });
-    expect(getEmbeddingTokenBudget(13)).toEqual({
-      maxInputTokens: 13,
-      safetyMarginTokens: 1,
-      effectiveTokenBudget: 12,
-    });
-  });
-
-  it('keeps texts within limit as single fragments', () => {
-    const plan = planEmbeddingFragments(['short text', 'another'], 20);
-
-    expect(plan.allFragments).toEqual(['short text', 'another']);
-    expect(plan.fragmentMap).toEqual([[0], [1]]);
-    expect(plan.splitTexts).toEqual([]);
-  });
-
-  it('splits oversized text by line and aggregates fragment embeddings back', () => {
-    const text = ['alpha', 'beta', 'gamma', 'delta'].join('\n');
-
-    const fragments = splitOversizedText(text, 10);
-    expect(fragments).toEqual(['alpha', 'beta', 'gamma', 'delta']);
-
-    const plan = planEmbeddingFragments([text, 'tail'], 10);
-    const aggregated = aggregateFragmentEmbeddings([text, 'tail'], plan.fragmentMap, [
-      { embedding: [1, 3, 5] },
-      { embedding: [3, 5, 7] },
-      { embedding: [5, 7, 9] },
-      { embedding: [7, 9, 11] },
-      { embedding: [10, 20, 30] },
-    ]);
-
-    expect(plan.fragmentMap).toEqual([[0, 1, 2, 3], [4]]);
-    expect(plan.splitTexts).toEqual([
-      {
-        textIndex: 0,
-        originalLength: text.length,
-        fragmentCount: 4,
-      },
-    ]);
-    expect(aggregated).toEqual([
-      {
-        text,
-        embedding: [4, 6, 8],
-        index: 0,
-      },
-      {
-        text: 'tail',
-        embedding: [10, 20, 30],
-        index: 1,
-      },
-    ]);
-  });
-
-  it('clips oversized single-line text into request-safe fragments', () => {
-    expect(splitOversizedText('abcdefghij', 10)).toEqual(['abcdefghi', 'j']);
-  });
-});
-
-describe('EmbeddingClient provider diagnostics', () => {
+describe('EmbeddingClient diagnostics', () => {
   const originalFetch = global.fetch;
 
   beforeEach(() => {
@@ -351,23 +208,5 @@ describe('EmbeddingClient provider diagnostics', () => {
 
     expect(error).toBeInstanceOf(EmbeddingFatalError);
     expect(error.diagnostics.category).toBe('incompatible_response');
-  });
-
-  it('rechecks request safety before sending even if unsafe text reaches the embedding layer', async () => {
-    global.fetch = vi.fn<typeof fetch>();
-
-    const client = createClient({ maxInputTokens: 10 });
-
-    await expect(
-      (client as any).processBatch(
-        ['abcdefghij'],
-        0,
-        1,
-        { recordBatch: vi.fn() },
-        { fatalError: null, controllers: new Set() },
-      ),
-    ).rejects.toThrow('发送前预算校验失败');
-
-    expect(global.fetch).not.toHaveBeenCalled();
   });
 });

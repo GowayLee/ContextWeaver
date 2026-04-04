@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { EmbeddingFatalError } from '../src/api/embedding.js';
+import { EmbeddingFatalError } from '../src/api/embedding/index.js';
 import { runIndexCliCommand } from '../src/index.js';
 import { ScanStageError } from '../src/scanner/index.js';
 
