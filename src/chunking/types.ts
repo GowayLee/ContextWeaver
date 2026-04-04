@@ -80,6 +80,7 @@ export interface SplitterConfig {
   /**
    * 物理字符硬上限（合并熔断）
    * - 防止 NWS 小但物理长度大的代码块（如大量注释）撑爆 Token 预算
+   * - 这里只负责 chunking 的粗粒度预算，不负责 embedding 请求的最终安全校验
    * - 合并时会同时检查 NWS 和 Raw 两个预算
    * - 默认为 maxChunkSize * 4（假设 1 token ≈ 4 chars）
    */

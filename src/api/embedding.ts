@@ -13,7 +13,12 @@
 
 import { type EmbeddingConfig, getEmbeddingConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
-import { aggregateFragmentEmbeddings, planEmbeddingFragments } from './embeddingFragments.js';
+import {
+  aggregateFragmentEmbeddings,
+  assertWithinEmbeddingTokenBudget,
+  getEmbeddingTokenBudget,
+  planEmbeddingFragments,
+} from './embeddingFragments.js';
 
 export type EmbeddingFailureCategory =
   | 'authentication'
@@ -403,7 +408,7 @@ export class EmbeddingClient {
       return [];
     }
 
-    const maxChars = this.config.maxInputTokens * 2;
+    const budget = getEmbeddingTokenBudget(this.config.maxInputTokens);
 
     const fragmentPlan = planEmbeddingFragments(texts, this.config.maxInputTokens);
 
@@ -412,7 +417,9 @@ export class EmbeddingClient {
         {
           textIndex: splitText.textIndex,
           originalLength: splitText.originalLength,
-          maxChars,
+          effectiveTokenBudget: budget.effectiveTokenBudget,
+          maxInputTokens: budget.maxInputTokens,
+          safetyMarginTokens: budget.safetyMarginTokens,
           fragmentCount: splitText.fragmentCount,
         },
         '文本超过 embedding 模型输入上限，已拆分为多个子片段',
@@ -627,6 +634,16 @@ export class EmbeddingClient {
   ): Promise<EmbeddingResult[]> {
     if (session.fatalError) {
       throw session.fatalError;
+    }
+
+    for (const text of texts) {
+      try {
+        assertWithinEmbeddingTokenBudget(text, this.config.maxInputTokens);
+      } catch (err) {
+        throw new EmbeddingFatalError(
+          `Embedding 请求在发送前预算校验失败: ${(err as Error).message}`,
+        );
+      }
     }
 
     const requestBody: EmbeddingRequest = {

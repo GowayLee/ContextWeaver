@@ -6,6 +6,8 @@ import {
 } from '../../src/api/embedding.js';
 import {
   aggregateFragmentEmbeddings,
+  estimateEmbeddingTokens,
+  getEmbeddingTokenBudget,
   planEmbeddingFragments,
   splitOversizedText,
 } from '../../src/api/embeddingFragments.js';
@@ -119,8 +121,24 @@ describe('EmbeddingClient fatal session', () => {
 });
 
 describe('embeddingFragments helpers', () => {
+  it('uses conservative token estimates for ascii chinese and multibyte text', () => {
+    expect(estimateEmbeddingTokens('abcdef')).toBe(6);
+    expect(estimateEmbeddingTokens('你好世界')).toBe(6);
+    expect(estimateEmbeddingTokens('你好🙂')).toBe(5);
+    expect(getEmbeddingTokenBudget(40)).toEqual({
+      maxInputTokens: 40,
+      safetyMarginTokens: 2,
+      effectiveTokenBudget: 38,
+    });
+    expect(getEmbeddingTokenBudget(13)).toEqual({
+      maxInputTokens: 13,
+      safetyMarginTokens: 1,
+      effectiveTokenBudget: 12,
+    });
+  });
+
   it('keeps texts within limit as single fragments', () => {
-    const plan = planEmbeddingFragments(['short text', 'another'], 100);
+    const plan = planEmbeddingFragments(['short text', 'another'], 20);
 
     expect(plan.allFragments).toEqual(['short text', 'another']);
     expect(plan.fragmentMap).toEqual([[0], [1]]);
@@ -130,10 +148,10 @@ describe('embeddingFragments helpers', () => {
   it('splits oversized text by line and aggregates fragment embeddings back', () => {
     const text = ['alpha', 'beta', 'gamma', 'delta'].join('\n');
 
-    const fragments = splitOversizedText(text, 4);
+    const fragments = splitOversizedText(text, 10);
     expect(fragments).toEqual(['alpha', 'beta', 'gamma', 'delta']);
 
-    const plan = planEmbeddingFragments([text, 'tail'], 4);
+    const plan = planEmbeddingFragments([text, 'tail'], 10);
     const aggregated = aggregateFragmentEmbeddings([text, 'tail'], plan.fragmentMap, [
       { embedding: [1, 3, 5] },
       { embedding: [3, 5, 7] },
@@ -162,6 +180,10 @@ describe('embeddingFragments helpers', () => {
         index: 1,
       },
     ]);
+  });
+
+  it('clips oversized single-line text into request-safe fragments', () => {
+    expect(splitOversizedText('abcdefghij', 10)).toEqual(['abcdefghi', 'j']);
   });
 });
 
@@ -329,5 +351,23 @@ describe('EmbeddingClient provider diagnostics', () => {
 
     expect(error).toBeInstanceOf(EmbeddingFatalError);
     expect(error.diagnostics.category).toBe('incompatible_response');
+  });
+
+  it('rechecks request safety before sending even if unsafe text reaches the embedding layer', async () => {
+    global.fetch = vi.fn<typeof fetch>();
+
+    const client = createClient({ maxInputTokens: 10 });
+
+    await expect(
+      (client as any).processBatch(
+        ['abcdefghij'],
+        0,
+        1,
+        { recordBatch: vi.fn() },
+        { fatalError: null, controllers: new Set() },
+      ),
+    ).rejects.toThrow('发送前预算校验失败');
+
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 });

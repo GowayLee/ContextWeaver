@@ -8,6 +8,12 @@ export interface EmbeddingFragmentPlan {
   }>;
 }
 
+export interface EmbeddingTokenBudget {
+  maxInputTokens: number;
+  safetyMarginTokens: number;
+  effectiveTokenBudget: number;
+}
+
 export interface EmbeddingLikeResult {
   embedding: number[];
 }
@@ -17,6 +23,8 @@ export interface AggregatedEmbeddingResult {
   embedding: number[];
   index: number;
 }
+
+const EMBEDDING_TOKEN_SAFETY_MARGIN_RATIO = 0.05;
 
 export function planEmbeddingFragments(
   texts: string[],
@@ -29,7 +37,7 @@ export function planEmbeddingFragments(
   for (let i = 0; i < texts.length; i++) {
     const text = texts[i];
 
-    if (estimateEmbeddingTokens(text) <= maxInputTokens) {
+    if (isWithinEmbeddingTokenBudget(text, maxInputTokens)) {
       fragmentMap.push([allFragments.length]);
       allFragments.push(text);
       continue;
@@ -88,12 +96,44 @@ export function aggregateFragmentEmbeddings(
 }
 
 export function estimateEmbeddingTokens(text: string): number {
-  return Math.ceil(text.length / 2);
+  const utf8Bytes = Buffer.byteLength(text, 'utf8');
+  return Math.max(text.length, Math.ceil(utf8Bytes / 2));
+}
+
+export function getEmbeddingTokenBudget(maxInputTokens: number): EmbeddingTokenBudget {
+  const safetyMarginTokens = Math.max(
+    1,
+    Math.ceil(maxInputTokens * EMBEDDING_TOKEN_SAFETY_MARGIN_RATIO),
+  );
+
+  return {
+    maxInputTokens,
+    safetyMarginTokens,
+    effectiveTokenBudget: Math.max(1, maxInputTokens - safetyMarginTokens),
+  };
+}
+
+export function isWithinEmbeddingTokenBudget(text: string, maxInputTokens: number): boolean {
+  return (
+    estimateEmbeddingTokens(text) <= getEmbeddingTokenBudget(maxInputTokens).effectiveTokenBudget
+  );
+}
+
+export function assertWithinEmbeddingTokenBudget(text: string, maxInputTokens: number): void {
+  const estimatedTokens = estimateEmbeddingTokens(text);
+  const budget = getEmbeddingTokenBudget(maxInputTokens);
+
+  if (estimatedTokens <= budget.effectiveTokenBudget) {
+    return;
+  }
+
+  throw new Error(
+    `文本估算 token 超过 embedding 安全预算: estimated=${estimatedTokens}, effectiveBudget=${budget.effectiveTokenBudget}, maxInputTokens=${budget.maxInputTokens}, safetyMargin=${budget.safetyMarginTokens}`,
+  );
 }
 
 export function splitOversizedText(text: string, maxInputTokens: number): string[] {
-  const maxChars = maxInputTokens * 2;
-  if (text.length <= maxChars) {
+  if (isWithinEmbeddingTokenBudget(text, maxInputTokens)) {
     return [text];
   }
 
@@ -103,11 +143,27 @@ export function splitOversizedText(text: string, maxInputTokens: number): string
 
   for (const line of lines) {
     const candidate = current.length === 0 ? line : `${current}\n${line}`;
-    if (candidate.length > maxChars && current.length > 0) {
-      fragments.push(current);
-      current = line;
-    } else {
+
+    if (isWithinEmbeddingTokenBudget(candidate, maxInputTokens)) {
       current = candidate;
+      continue;
+    }
+
+    if (current.length > 0) {
+      fragments.push(current);
+      current = '';
+    }
+
+    if (line.length === 0) {
+      current = line;
+      continue;
+    }
+
+    let remaining = line;
+    while (remaining.length > 0) {
+      const clipped = clipTextToBudget(remaining, maxInputTokens);
+      fragments.push(clipped);
+      remaining = remaining.slice(clipped.length);
     }
   }
 
@@ -115,13 +171,39 @@ export function splitOversizedText(text: string, maxInputTokens: number): string
     fragments.push(current);
   }
 
-  for (let i = 0; i < fragments.length; i++) {
-    if (fragments[i].length > maxChars) {
-      fragments[i] = fragments[i].slice(0, maxChars);
+  if (fragments.length === 0) {
+    return [clipTextToBudget(text, maxInputTokens)];
+  }
+
+  for (const fragment of fragments) {
+    assertWithinEmbeddingTokenBudget(fragment, maxInputTokens);
+  }
+
+  return fragments;
+}
+
+export function clipTextToBudget(text: string, maxInputTokens: number): string {
+  if (text.length === 0) {
+    return text;
+  }
+
+  let low = 1;
+  let high = text.length;
+  let bestFit = 0;
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const candidate = text.slice(0, mid);
+
+    if (isWithinEmbeddingTokenBudget(candidate, maxInputTokens)) {
+      bestFit = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
     }
   }
 
-  return fragments.length > 0 ? fragments : [text.slice(0, maxChars)];
+  return text.slice(0, Math.max(1, bestFit));
 }
 
 export function averageEmbeddings(embeddings: number[][]): number[] {

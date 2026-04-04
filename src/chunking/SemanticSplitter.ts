@@ -24,7 +24,7 @@ export class SemanticSplitter {
       maxChunkSize,
       minChunkSize: config.minChunkSize ?? 100,
       chunkOverlap: config.chunkOverlap ?? 200,
-      // 物理字符硬上限：默认为 maxChunkSize * 4（假设 1 token ≈ 4 chars）
+      // 物理字符硬上限只服务于粗粒度分片；embedding 请求安全由 embedding 层单独复核。
       maxRawChars: config.maxRawChars ?? maxChunkSize * 4,
     };
   }
