@@ -56,6 +56,7 @@ export interface EmbeddingConfig {
   apiKey: string;
   baseUrl: string;
   model: string;
+  batchSize: number;
   maxConcurrency: number;
   /** 向量维度 */
   dimensions: number;
@@ -141,6 +142,7 @@ export function getEmbeddingConfig(): EmbeddingConfig {
   const apiKey = process.env.EMBEDDINGS_API_KEY;
   const baseUrl = process.env.EMBEDDINGS_BASE_URL;
   const model = process.env.EMBEDDINGS_MODEL;
+  const batchSize = parseInt(process.env.EMBEDDINGS_BATCH_SIZE || '10', 10);
   const maxConcurrency = parseInt(process.env.EMBEDDINGS_MAX_CONCURRENCY || '10', 10);
 
   if (!apiKey) {
@@ -160,6 +162,7 @@ export function getEmbeddingConfig(): EmbeddingConfig {
     apiKey,
     baseUrl,
     model,
+    batchSize: Number.isNaN(batchSize) || batchSize < 1 ? 10 : batchSize,
     maxConcurrency: Number.isNaN(maxConcurrency) ? 4 : maxConcurrency,
     dimensions: Number.isNaN(dimensions) ? 1024 : dimensions,
     maxInputTokens: Number.isNaN(maxInputTokens) ? 8192 : maxInputTokens,

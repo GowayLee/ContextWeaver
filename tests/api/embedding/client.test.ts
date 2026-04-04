@@ -16,6 +16,7 @@ function createClient(overrides?: Partial<ConstructorParameters<typeof Embedding
     apiKey: 'test-key',
     baseUrl: 'https://example.com/embeddings',
     model: 'test-model',
+    batchSize: 2,
     maxConcurrency: 1,
     dimensions: 3,
     maxInputTokens: 1000,
@@ -117,6 +118,7 @@ describe('EmbeddingClient orchestration', () => {
       apiKey: 'test-key',
       baseUrl: 'https://example.com/embeddings',
       model: 'test-model',
+      batchSize: 2,
       maxConcurrency: 1,
       dimensions: 3,
       maxInputTokens: 1000,
@@ -124,5 +126,32 @@ describe('EmbeddingClient orchestration', () => {
 
     await expect(client.embed('hello')).resolves.toEqual([0.1, 0.2, 0.3]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses config.batchSize when embedBatch is called without an explicit batchSize', async () => {
+    const client = createClient({ batchSize: 2 });
+    const processBatchSpy = vi
+      .spyOn(client as any, 'processBatch')
+      .mockImplementation(async (...args: any[]) => {
+        const [texts, startIndex, _batchSize, progress] = args as [
+          string[],
+          number,
+          number,
+          { recordBatch: (tokens: number) => void },
+        ];
+
+        progress.recordBatch(1);
+        return texts.map((_, index) => ({
+          embedding: [startIndex + index + 0.1, 0.2, 0.3],
+          tokens: 1,
+        }));
+      });
+
+    const results = await client.embedBatch(['a', 'b', 'c']);
+
+    expect(results).toHaveLength(3);
+    expect(processBatchSpy).toHaveBeenCalledTimes(2);
+    expect(processBatchSpy.mock.calls[0]?.[2]).toBe(2);
+    expect(processBatchSpy.mock.calls[1]?.[2]).toBe(2);
   });
 });

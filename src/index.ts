@@ -268,6 +268,7 @@ cli.command('init', '初始化 ContextWeaver 配置').action(async () => {
 EMBEDDINGS_API_KEY=your-api-key-here
 EMBEDDINGS_BASE_URL=https://api.siliconflow.cn/v1/embeddings
 EMBEDDINGS_MODEL=BAAI/bge-m3
+EMBEDDINGS_BATCH_SIZE=10
 EMBEDDINGS_MAX_CONCURRENCY=10
 EMBEDDINGS_DIMENSIONS=1024
 EMBEDDINGS_MAX_INPUT_TOKENS=8192

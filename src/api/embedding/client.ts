@@ -40,7 +40,7 @@ export class EmbeddingClient {
 
   async embedBatch(
     texts: string[],
-    batchSize = 20,
+    batchSize = this.config.batchSize,
     onProgress?: (completed: number, total: number) => void,
   ): Promise<EmbeddingResult[]> {
     if (texts.length === 0) {

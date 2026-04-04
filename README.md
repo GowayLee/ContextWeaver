@@ -48,6 +48,7 @@ cw init
 EMBEDDINGS_API_KEY=your-api-key-here
 EMBEDDINGS_BASE_URL=https://api.siliconflow.cn/v1/embeddings
 EMBEDDINGS_MODEL=BAAI/bge-m3
+EMBEDDINGS_BATCH_SIZE=10
 EMBEDDINGS_MAX_CONCURRENCY=10
 EMBEDDINGS_DIMENSIONS=1024
 EMBEDDINGS_MAX_INPUT_TOKENS=8192
@@ -57,6 +58,10 @@ RERANK_BASE_URL=https://api.siliconflow.cn/v1/rerank
 RERANK_MODEL=BAAI/bge-reranker-v2-m3
 RERANK_TOP_N=20
 ```
+
+| 环境变量                | 默认值 | 说明                                                    |
+| ----------------------- | ------ | ------------------------------------------------------- |
+| `EMBEDDINGS_BATCH_SIZE` | `10`   | 单次 Embedding API 请求的文本条数，非法值会回退到默认值 |
 
 ## 项目索引配置
 

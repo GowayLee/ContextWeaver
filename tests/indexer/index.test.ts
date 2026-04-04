@@ -70,6 +70,7 @@ describe('Indexer fatal embedding propagation', () => {
     } as any);
 
     (indexer as any).embeddingClient = {
+      getConfig: vi.fn().mockReturnValue({ batchSize: 20 }),
       embedBatch: vi.fn().mockRejectedValue(upstreamError),
     };
 
