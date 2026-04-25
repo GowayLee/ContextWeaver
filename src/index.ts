@@ -11,7 +11,7 @@ import { type EmbeddingFailureDiagnostics, EmbeddingFatalError } from './api/emb
 import {
   initProjectConfigCommand,
   installBundledSkills,
-  resolveSkillInstallTarget,
+  prepareSkillInstallTarget,
   runCleanIndexes,
   runIndexCommand,
 } from './cli.js';
@@ -331,13 +331,14 @@ cli
 
 cli
   .command('install-skills', '安装内置 Skill 到目标目录')
-  .option('--dir <path>', '安装目录（默认当前目录）')
+  .option('--dir <path>', '安装目录（必填，需显式提供完整路径）')
   .option('-f, --force', '覆盖已存在的 Skill 目录')
   .action(async (options: { dir?: string; force?: boolean }) => {
     try {
-      const resolvedTarget = resolveSkillInstallTarget({
+      const resolvedTarget = await prepareSkillInstallTarget({
         cwd: process.cwd(),
         targetDir: options.dir,
+        isInteractive: Boolean(process.stdin.isTTY && process.stdout.isTTY),
       });
 
       const installed = await installBundledSkills({

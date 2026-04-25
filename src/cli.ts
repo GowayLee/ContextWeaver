@@ -49,6 +49,55 @@ export function resolveSkillInstallTarget(options: { cwd: string; targetDir?: st
   return options.cwd;
 }
 
+async function defaultConfirmCreateSkillInstallTarget(targetDir: string): Promise<boolean> {
+  const rl = createInterface({ input: stdin, output: stdout });
+
+  try {
+    const answer = await rl.question(`安装目录不存在，是否创建完整路径？\n${targetDir}\n[y/N] `);
+    return answer.trim().toLowerCase() === 'y';
+  } finally {
+    rl.close();
+  }
+}
+
+export async function prepareSkillInstallTarget(options: {
+  cwd: string;
+  targetDir?: string;
+  isInteractive: boolean;
+  confirmCreateTarget?: (targetDir: string) => Promise<boolean>;
+  createDir?: (targetDir: string) => Promise<void>;
+}): Promise<string> {
+  if (!options.targetDir) {
+    throw new Error('install-skills 要求显式传入 --dir，并提供完整安装路径');
+  }
+
+  const resolvedTarget = resolveSkillInstallTarget({
+    cwd: options.cwd,
+    targetDir: options.targetDir,
+  });
+
+  if (await pathExists(resolvedTarget)) {
+    return resolvedTarget;
+  }
+
+  if (!options.isInteractive) {
+    throw new Error(`安装目录不存在，请先创建后重试: ${resolvedTarget}`);
+  }
+
+  const confirmed = await (options.confirmCreateTarget ?? defaultConfirmCreateSkillInstallTarget)(
+    resolvedTarget,
+  );
+  if (!confirmed) {
+    throw new Error(`已取消创建安装目录: ${resolvedTarget}`);
+  }
+
+  await (options.createDir ?? ((targetDir) => fs.mkdir(targetDir, { recursive: true })))(
+    resolvedTarget,
+  );
+
+  return resolvedTarget;
+}
+
 export async function installBundledSkills(options: {
   targetDir: string;
   force: boolean;
@@ -56,8 +105,6 @@ export async function installBundledSkills(options: {
   const bundledSkillsDir = path.join(getPackageRootDir(), 'skills');
   const entries = await fs.readdir(bundledSkillsDir, { withFileTypes: true });
   const skillDirs = entries.filter((entry) => entry.isDirectory());
-
-  await fs.mkdir(options.targetDir, { recursive: true });
 
   const installed: Array<{ name: string; targetPath: string }> = [];
   for (const entry of skillDirs) {

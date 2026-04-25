@@ -11,6 +11,7 @@ import {
   ensureSearchableProject,
   initProjectConfigCommand,
   installBundledSkills,
+  prepareSkillInstallTarget,
   recordIndexedProject,
   resolveSkillInstallTarget,
   runCleanIndexes,
@@ -125,8 +126,13 @@ describe('cli helpers', () => {
     );
   });
 
-  it('defaults skill installation to the local opencode skill directory', () => {
-    expect(resolveSkillInstallTarget({ cwd: '/tmp/repo' })).toBe('/tmp/repo');
+  it('requires an explicit skill installation directory', async () => {
+    await expect(
+      prepareSkillInstallTarget({
+        cwd: '/tmp/repo',
+        isInteractive: true,
+      }),
+    ).rejects.toThrow('--dir');
   });
 
   it('resolves an explicit skill installation directory relative to cwd', () => {
@@ -136,6 +142,59 @@ describe('cli helpers', () => {
         targetDir: './agent-skills',
       }),
     ).toBe('/tmp/repo/agent-skills');
+  });
+
+  it('creates a missing skill installation directory after confirmation', async () => {
+    const repoRoot = await createTempDir('cw-repo-');
+    const targetDir = path.join(repoRoot, 'agent', 'skills');
+
+    const resolvedTarget = await prepareSkillInstallTarget({
+      cwd: repoRoot,
+      targetDir: './agent/skills',
+      isInteractive: true,
+      confirmCreateTarget: async () => true,
+    });
+
+    expect(resolvedTarget).toBe(targetDir);
+    await expect(fs.access(targetDir)).resolves.toBeUndefined();
+
+    const installed = await installBundledSkills({
+      targetDir,
+      force: false,
+    });
+
+    expect(installed.map((item) => item.name).sort()).toEqual([
+      'enhancing-prompts',
+      'using-contextweaver',
+    ]);
+  });
+
+  it('aborts when the user rejects creating a missing skill installation directory', async () => {
+    const repoRoot = await createTempDir('cw-repo-');
+    const targetDir = path.join(repoRoot, 'agent', 'skills');
+
+    await expect(
+      prepareSkillInstallTarget({
+        cwd: repoRoot,
+        targetDir: './agent/skills',
+        isInteractive: true,
+        confirmCreateTarget: async () => false,
+      }),
+    ).rejects.toThrow('已取消创建安装目录');
+
+    await expect(fs.access(targetDir)).rejects.toThrow();
+  });
+
+  it('fails in non-interactive mode when the skill installation directory is missing', async () => {
+    const repoRoot = await createTempDir('cw-repo-');
+
+    await expect(
+      prepareSkillInstallTarget({
+        cwd: repoRoot,
+        targetDir: './agent/skills',
+        isInteractive: false,
+      }),
+    ).rejects.toThrow('安装目录不存在');
   });
 
   it('refuses to overwrite cwconfig.json without force', async () => {

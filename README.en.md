@@ -90,10 +90,7 @@ contextweaver search [--format json] --information-request "How is prompt enhanc
 # Prepare repo-aware evidence for prompt enhancement (plain text by default)
 contextweaver prompt-context [--format json] "Align prompt enhancement with Skills"
 
-# Install bundled skills into the current directory
-contextweaver install-skills
-
-# Install bundled skills into a custom directory
+# Install bundled skills into a custom directory (`--dir` is required)
 contextweaver install-skills --dir ./agent-skills
 
 # Clean stale indexes
@@ -115,7 +112,7 @@ The repository ships distributable skills under `skills/`:
   - helper script: `scripts/prepare-enhancement-context.mjs`
   - prompt templates under `templates/`
 
-When installed from npm, bundled skills ship with the package. Use `contextweaver install-skills` to copy them into the current directory, or pass `--dir` to target any agent-specific location.
+When installed from npm, bundled skills ship with the package. `contextweaver install-skills` requires an explicit `--dir` target and does not assume any default install location. If the full target path does not exist, the CLI asks for confirmation before creating it in interactive mode.
 
 ## Architecture
 
